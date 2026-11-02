@@ -1,3 +1,30 @@
+# mynotch
+
+A personal fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) with one persistent definition of done.
+
+- The active goal sits below the notch in 8pt text. Nothing is shown there when empty.
+- A small countdown ring sits to the left of the music player, including when music is idle.
+- Click the ring or goal text to open the One Goal tab beside Shelf.
+- A countdown is optional. Expiry is silent and does not complete the goal.
+- Complete clears the goal and countdown, including their saved state. No history is kept.
+
+The app builds as `mynotch.app` with separate preferences from boring.notch. Upstream auto-updates are disabled so they cannot replace this fork. Existing music, Shelf, calendar, camera, and HUD features remain available.
+
+Build with Xcode using the existing `boringNotch` scheme, or:
+
+```bash
+xcodebuild -project boringNotch.xcodeproj -scheme boringNotch \
+  -configuration Debug -derivedDataPath /tmp/mynotch-build \
+  CODE_SIGNING_ALLOWED=NO build
+open /tmp/mynotch-build/Build/Products/Debug/mynotch.app
+```
+
+Run the isolated goal/countdown tests with `scripts/test-one-goal.sh`. An optional native UI smoke test is in `Tests/OneGoalUISmoke.swift`. See [One Goal implementation and manual checks](docs/one-goal.md).
+
+The upstream README and attribution follow.
+
+---
+
 <h1 align="center">
   <br>
   <a href="http://theboring.name"><img src="https://framerusercontent.com/images/RFK4vs0kn8pRMuOO58JeyoemXA.png?scale-down-to=256" alt="Boring Notch" width="150"></a>

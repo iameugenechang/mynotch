@@ -33,6 +33,7 @@ extension SkyLightOperator {
 
 class BoringNotchSkyLightWindow: NSPanel {
     private var isSkyLightEnabled: Bool = false
+    weak var goalViewModel: BoringViewModel?
     
     override init(
         contentRect: NSRect,
@@ -109,6 +110,18 @@ class BoringNotchSkyLightWindow: NSPanel {
     
     private var observers: Set<AnyCancellable> = []
     
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { goalViewModel?.isGoalEditorActive == true }
+
+    override func resignKey() {
+        super.resignKey()
+        // Clicking another app dismisses the editor without saving its draft.
+        if let vm = goalViewModel, vm.isGoalEditorActive {
+            vm.isGoalEditorActive = false
+            let transferringEditor = NSApp.windows.contains { window in
+                window !== self && (window as? BoringNotchSkyLightWindow)?.goalViewModel?.isGoalEditorActive == true
+            }
+            vm.close(resetSelectedTab: !transferringEditor)
+        }
+    }
     override var canBecomeMain: Bool { false }
 }

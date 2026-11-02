@@ -31,6 +31,7 @@ class BoringViewModel: NSObject, ObservableObject {
     @Published var edgeAutoOpenActive: Bool = false
     @Published var isHoveringCalendar: Bool = false
     @Published var isBatteryPopoverActive: Bool = false
+    @Published var isGoalEditorActive = false
 
     @Published var screenUUID: String?
 
@@ -197,9 +198,15 @@ class BoringViewModel: NSObject, ObservableObject {
         MusicManager.shared.forceUpdate()
     }
 
-    func close() {
-        // Do not close while a share picker or sharing service is active
-        if SharingStateManager.shared.preventNotchClose {
+    func openGoalEditor() {
+        isGoalEditorActive = true
+        coordinator.currentView = .goal
+        open()
+    }
+
+    func close(resetSelectedTab: Bool = true) {
+        // Text entry must survive hover exits and delayed auto-close tasks.
+        if SharingStateManager.shared.preventNotchClose || isGoalEditorActive {
             return
         }
         self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
@@ -209,9 +216,12 @@ class BoringViewModel: NSObject, ObservableObject {
         self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false
 
+        // Do not change the shared tab while another display is taking editor focus.
+        guard resetSelectedTab else { return }
+
         // Set the current view to shelf if it contains files and the user enables openShelfByDefault
         // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
-    if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
+        if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
             coordinator.currentView = .shelf
         } else if !coordinator.openLastTabByDefault {
             coordinator.currentView = .home

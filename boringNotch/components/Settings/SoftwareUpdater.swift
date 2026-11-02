@@ -30,7 +30,7 @@ struct CheckForUpdatesView: View {
     
     var body: some View {
         Button("Check for Updates…", action: updater.checkForUpdates)
-            .disabled(!checkForUpdatesViewModel.canCheckForUpdates)
+            .disabled(!checkForUpdatesViewModel.canCheckForUpdates || Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") == nil)
     }
 }
 
@@ -62,6 +62,9 @@ struct UpdaterSettingsView: View {
             HStack {
                 Text("Software updates")
             }
+        } footer: {
+            Text("Updates are disabled for this fork so upstream releases cannot replace mynotch.")
         }
+        .disabled(Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") == nil)
     }
 }

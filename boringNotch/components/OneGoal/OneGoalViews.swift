@@ -1,0 +1,202 @@
+import SwiftUI
+
+struct OneGoalCountdownButton: View {
+    @ObservedObject private var store = OneGoalStore.shared
+    var action: () -> Void
+
+    var body: some View {
+        if let countdown = store.goal.countdown {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                ring(fraction: countdown.fractionRemaining(at: context.date))
+                    .help("\(countdown.remainingText(at: context.date)) remaining. Edit One Goal")
+                    .accessibilityValue("\(countdown.remainingText(at: context.date)) remaining")
+            }
+        } else {
+            ring(fraction: 0)
+                .help("Edit One Goal")
+        }
+    }
+
+    private func ring(fraction: Double) -> some View {
+        Button(action: action) {
+            ZStack {
+                Circle().stroke(.white.opacity(0.22), lineWidth: 1.5)
+                Circle()
+                    .trim(from: 0, to: fraction)
+                    .stroke(.white.opacity(0.85), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 12, height: 12)
+            .frame(width: 24, height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Edit One Goal")
+        .transaction { $0.disablesAnimations = true }
+    }
+}
+
+struct OneGoalLabel: View {
+    @ObservedObject private var store = OneGoalStore.shared
+    let width: CGFloat
+    var action: () -> Void
+
+    var body: some View {
+        if !store.goal.text.isEmpty {
+            Button(action: action) {
+                Text(store.goal.text)
+                    .font(.system(size: 8))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: max(0, width), height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(store.goal.text)
+            .accessibilityLabel("Edit goal: \(store.goal.text)")
+        }
+    }
+}
+
+struct OneGoalView: View {
+    @EnvironmentObject private var vm: BoringViewModel
+    @ObservedObject private var store = OneGoalStore.shared
+    @State private var draft = ""
+    @State private var minutes = "25"
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable { case goal, minutes }
+
+    private var duration: Int? {
+        guard let value = Int(minutes), (1...1440).contains(value) else { return nil }
+        return value
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("What does done mean?")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TextField("One clear outcome", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .goal)
+                .onSubmit(save)
+                .accessibilityLabel("Goal")
+
+            HStack(spacing: 8) {
+                Text("Countdown")
+                    .foregroundStyle(.secondary)
+                TextField("Minutes", text: $minutes)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 50)
+                    .focused($focusedField, equals: .minutes)
+                    .onSubmit(startCountdown)
+                    .accessibilityLabel("Countdown minutes")
+                    .help("Optional, from 1 to 1440 minutes")
+                Text("min")
+                    .foregroundStyle(.secondary)
+                Button(store.goal.countdown == nil ? "Start" : "Restart", action: startCountdown)
+                    .disabled(duration == nil || OneGoal.normalized(draft).isEmpty)
+
+                if let countdown = store.goal.countdown {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(countdown.remainingText(at: context.date))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Clear", action: store.clearCountdown)
+                        .help("Remove the countdown, keeping the goal")
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.caption)
+
+            HStack {
+                Button("Complete") {
+                    store.complete()
+                    dismiss()
+                }
+                .disabled(store.goal.text.isEmpty && OneGoal.normalized(draft).isEmpty)
+                Spacer()
+                Button("Cancel", action: dismiss)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save", action: save)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.small)
+        }
+        .padding(.top, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(OneGoalInputFocus(isEditing: vm.isGoalEditorActive))
+        .task {
+            draft = store.goal.text
+            if let countdown = store.goal.countdown {
+                minutes = String(Int(countdown.duration / 60))
+            }
+            await Task.yield()
+            if vm.isGoalEditorActive { focusedField = .goal }
+        }
+        .onChange(of: vm.isGoalEditorActive) { _, active in
+            if active { focusedField = .goal }
+        }
+        .onDisappear {
+            focusedField = nil
+            draft = ""
+            vm.isGoalEditorActive = false
+        }
+    }
+
+    private func save() {
+        store.save(text: draft)
+        dismiss()
+    }
+
+    private func startCountdown() {
+        guard let duration else { return }
+        store.save(text: draft)
+        store.startCountdown(minutes: duration)
+    }
+
+    private func dismiss() {
+        focusedField = nil
+        vm.isGoalEditorActive = false
+        vm.close()
+    }
+}
+
+/// The notch normally cannot become key. Request input focus only for this editor.
+private struct OneGoalInputFocus: NSViewRepresentable {
+    var isEditing: Bool
+
+    func makeNSView(context: Context) -> FocusView { FocusView() }
+
+    func updateNSView(_ nsView: FocusView, context: Context) {
+        nsView.isEditing = isEditing
+        nsView.requestFocus()
+    }
+
+    static func dismantleNSView(_ nsView: FocusView, coordinator: ()) {
+        nsView.isEditing = false
+        if nsView.window?.isKeyWindow == true { nsView.window?.resignKey() }
+    }
+
+    final class FocusView: NSView {
+        var isEditing = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            requestFocus()
+        }
+
+        func requestFocus() {
+            guard isEditing else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isEditing, let window = self.window,
+                      !window.isKeyWindow else { return }
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+    }
+}

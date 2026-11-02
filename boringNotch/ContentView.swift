@@ -23,8 +23,11 @@ struct ContentView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
+    @ObservedObject private var goalStore = OneGoalStore.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
+    @State private var isHoveringGoalControl = false
+    @State private var isPointerInsideNotch = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
 
     @State private var gestureProgress: CGFloat = .zero
@@ -56,6 +59,14 @@ struct ContentView: View {
                 ? cornerRadiusInsets.opened.bottom
                 : cornerRadiusInsets.closed.bottom
         )
+    }
+
+    // Keep the goal below both the physical camera and the menu bar, even with
+    // custom notch heights or fullscreen hiding enabled for other activities.
+    private var goalHeaderHeight: CGFloat {
+        let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) }
+        let menuBarHeight = screen.map { $0.frame.maxY - $0.visibleFrame.maxY } ?? 0
+        return max(24, vm.closedNotchSize.height, screen?.safeAreaInsets.top ?? 0, menuBarHeight)
     }
 
     private var computedChinWidth: CGFloat {
@@ -118,7 +129,7 @@ struct ContentView: View {
                     )
                 
                 mainLayout
-                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
+                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil, alignment: .top)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
                         let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
@@ -160,6 +171,9 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .onChange(of: coordinator.currentView) { _, newView in
+                        if newView != .goal { vm.isGoalEditorActive = false }
+                    }
                     .onChange(of: vm.notchState) { _, newState in
                         if newState == .closed && isHovering {
                             withAnimation {
@@ -195,6 +209,7 @@ struct ContentView: View {
                         //                    }
                         //                    .keyboardShortcut("E", modifiers: .command)
                     }
+                    .accessibilityElement(children: .contain)
                 if vm.chinHeight > 0 {
                     Rectangle()
                         .fill(Color.black.opacity(0.01))
@@ -245,7 +260,7 @@ struct ContentView: View {
     @ViewBuilder
     func NotchLayout() -> some View {
         VStack(alignment: .leading) {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: vm.notchState == .closed ? 0 : 8) {
                 if coordinator.helloAnimationRunning {
                     Spacer()
                     HelloAnimation(onFinish: {
@@ -257,48 +272,67 @@ struct ContentView: View {
                     .padding(.top, 40)
                     Spacer()
                 } else {
-                    if coordinator.expandingView.type == .battery && coordinator.expandingView.show
-                        && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
-                    {
-                        HStack(spacing: 0) {
-                            HStack {
-                                Text(batteryModel.statusText)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white)
-                            }
+                    Group {
+                        if coordinator.expandingView.type == .battery && coordinator.expandingView.show
+                            && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
+                        {
+                            HStack(spacing: 0) {
+                                HStack {
+                                    Text(batteryModel.statusText)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.white)
+                                }
 
-                            Rectangle()
-                                .fill(.black)
-                                .frame(width: vm.closedNotchSize.width + 10)
+                                Rectangle()
+                                    .fill(.black)
+                                    .frame(width: vm.closedNotchSize.width + 10)
 
-                            HStack {
-                                BoringBatteryView(
-                                    batteryWidth: 30,
-                                    isCharging: batteryModel.isCharging,
-                                    isInLowPowerMode: batteryModel.isInLowPowerMode,
-                                    isPluggedIn: batteryModel.isPluggedIn,
-                                    levelBattery: batteryModel.levelBattery,
-                                    isForNotification: true
-                                )
+                                HStack {
+                                    BoringBatteryView(
+                                        batteryWidth: 30,
+                                        isCharging: batteryModel.isCharging,
+                                        isInLowPowerMode: batteryModel.isInLowPowerMode,
+                                        isPluggedIn: batteryModel.isPluggedIn,
+                                        levelBattery: batteryModel.levelBattery,
+                                        isForNotification: true
+                                    )
+                                }
+                                .frame(width: 76, alignment: .trailing)
                             }
-                            .frame(width: 76, alignment: .trailing)
+                            .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                        } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
+                            InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
+                                .transition(.opacity)
+                        } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
+                            MusicLiveActivity()
+                                .frame(alignment: .center)
+                        } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed {
+                            BoringFaceAnimation()
+                        } else if vm.notchState == .open {
+                            BoringHeader()
+                                .frame(height: max(24, vm.effectiveClosedNotchHeight))
+                                .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
+                        } else {
+                            Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
                         }
-                        .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
-                      } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
-                          InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
-                              .transition(.opacity)
-                      } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
-                          MusicLiveActivity()
-                              .frame(alignment: .center)
-                      } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
-                          BoringFaceAnimation()
-                       } else if vm.notchState == .open {
-                           BoringHeader()
-                               .frame(height: max(24, vm.effectiveClosedNotchHeight))
-                               .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
-                       } else {
-                           Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
-                       }
+                    }
+                    .frame(minHeight: goalHeaderHeight)
+                    // Symmetric gutters keep the camera spacer centered. The ring
+                    // uses the left gutter, ahead of the existing album artwork.
+                    .padding(.horizontal, vm.notchState == .closed ? 32 : 0)
+                    .overlay(alignment: .leading) {
+                        if vm.notchState == .closed {
+                            OneGoalCountdownButton(action: openGoalEditor)
+                                .onHover(perform: handleGoalHover)
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+
+                    if !goalStore.goal.text.isEmpty {
+                        OneGoalLabel(width: vm.closedNotchSize.width - 20, action: openGoalEditor)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .onHover(perform: handleGoalHover)
+                    }
 
                       if coordinator.sneakPeek.show {
                           if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && !Defaults[.inlineHUD] && vm.notchState == .closed {
@@ -349,6 +383,8 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .shelf:
                         ShelfView()
+                    case .goal:
+                        OneGoalView()
                     }
                 }
                 .transition(
@@ -443,7 +479,7 @@ struct ContentView: View {
                     width: (coordinator.expandingView.show
                         && coordinator.expandingView.type == .music
                         && Defaults[.sneakPeekStyles] == .inline)
-                        ? 380
+                        ? min(380, windowSize.width - 2 * max(0, vm.effectiveClosedNotchHeight - 12) - 16 - 64 - 2 * cornerRadiusInsets.closed.bottom)
                         : vm.closedNotchSize.width
                             + -cornerRadiusInsets.closed.top
                 )
@@ -502,6 +538,20 @@ struct ContentView: View {
         }
     }
 
+    private func openGoalEditor() {
+        hoverTask?.cancel()
+        vm.openGoalEditor()
+    }
+
+    private func handleGoalHover(_ hovering: Bool) {
+        isHoveringGoalControl = hovering
+        if hovering {
+            hoverTask?.cancel()
+        } else if isPointerInsideNotch {
+            handleHover(true)
+        }
+    }
+
     private func doOpen() {
         withAnimation(animationSpring) {
             vm.open()
@@ -511,6 +561,7 @@ struct ContentView: View {
     // MARK: - Hover Management
 
     private func handleHover(_ hovering: Bool) {
+        isPointerInsideNotch = hovering
         if coordinator.firstLaunch { return }
         hoverTask?.cancel()
         
@@ -524,6 +575,7 @@ struct ContentView: View {
             }
             
             guard vm.notchState == .closed,
+                  !isHoveringGoalControl,
                   !coordinator.sneakPeek.show,
                   Defaults[.openNotchOnHover] else { return }
             
@@ -533,6 +585,7 @@ struct ContentView: View {
                 
                 await MainActor.run {
                     guard self.vm.notchState == .closed,
+                          !self.isHoveringGoalControl,
                           self.isHovering,
                           !self.coordinator.sneakPeek.show else { return }
                     
