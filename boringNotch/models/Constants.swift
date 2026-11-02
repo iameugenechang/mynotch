@@ -68,7 +68,34 @@ enum OptionKeyAction: String, CaseIterable, Identifiable, Defaults.Serializable 
     var id: String { self.rawValue }
 }
 
+enum OneGoalTimerPosition: String, CaseIterable, Defaults.Serializable {
+    case top
+    case bottom
+}
+
+enum OneGoalTimerStyle: String, CaseIterable, Defaults.Serializable {
+    case underline
+    case visualizerRing
+}
+
+extension OneGoalCompletionSound: Defaults.Serializable {}
+
+@MainActor
+func oneGoalCaptionHeight(fontSize: CGFloat, padding: CGFloat) -> CGFloat {
+    let font = NSFont.systemFont(ofSize: fontSize)
+    return OneGoalLayout.captionHeight(lineHeight: font.ascender - font.descender + font.leading, padding: padding)
+}
+
 extension Defaults.Keys {
+    // MARK: One Goal
+    static let oneGoalFontSize = Key<CGFloat>("oneGoalFontSize", default: 7)
+    static let oneGoalTextPadding = Key<CGFloat>("oneGoalTextPadding", default: 1)
+    static let oneGoalTimerStyle = Key<OneGoalTimerStyle>("oneGoalTimerStyle", default: .underline)
+    static let oneGoalVerticalOffset = Key<CGFloat>("oneGoalVerticalOffset", default: 12)
+    static let oneGoalTimerPosition = Key<OneGoalTimerPosition>("oneGoalTimerPosition", default: .bottom)
+    static let oneGoalCompletionSound = Key<OneGoalCompletionSound>("oneGoalCompletionSound", default: .glass)
+    static let oneGoalSoundVolume = Key<Double>("oneGoalSoundVolume", default: 0.5)
+
     // MARK: General
     static let menubarIcon = Key<Bool>("menubarIcon", default: true)
     static let showOnAllDisplays = Key<Bool>("showOnAllDisplays", default: false)
@@ -127,6 +154,7 @@ extension Defaults.Keys {
     static let enableSneakPeek = Key<Bool>("enableSneakPeek", default: false)
     static let sneakPeekStyles = Key<SneakPeekStyle>("sneakPeekStyles", default: .standard)
     static let waitInterval = Key<Double>("waitInterval", default: 3)
+    static let keepMediaVisibleWhenPaused = Key<Bool>("keepMediaVisibleWhenPaused", default: true)
     static let showShuffleAndRepeat = Key<Bool>("showShuffleAndRepeat", default: false)
     static let enableLyrics = Key<Bool>("enableLyrics", default: false)
     static let musicControlSlots = Key<[MusicControlButton]>(

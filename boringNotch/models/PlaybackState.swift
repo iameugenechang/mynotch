@@ -30,6 +30,17 @@ struct PlaybackState {
     var isFavorite: Bool = false
 }
 
+enum MediaVisibilityPolicy {
+    static func hasCurrentTrack(title: String, lastUpdated: Date) -> Bool {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !title.isEmpty && title != "Unknown" && lastUpdated != .distantPast
+    }
+
+    static func shouldShowPlayer(isPlaying: Bool, isIdle: Bool, keepWhilePaused: Bool, hasTrack: Bool) -> Bool {
+        isPlaying || !isIdle || (keepWhilePaused && hasTrack)
+    }
+}
+
 extension PlaybackState: Equatable {
     static func == (lhs: PlaybackState, rhs: PlaybackState) -> Bool {
         return lhs.bundleIdentifier == rhs.bundleIdentifier

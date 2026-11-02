@@ -2,10 +2,12 @@
 
 A personal fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) with one persistent definition of done.
 
-- The active goal is centered in 8pt text at the bottom of the menu bar, inside the notch's existing height. There is no lower lip or extra height. This experimental placement needs a physical-display readability check. Nothing is shown there when empty.
-- An optional countdown appears as a thin underline beneath the goal. There is no separate timer icon or extra notch shoulder.
+- One goal shares the notch's width and outer curves, including media extensions. Nothing extra is shown when empty.
+- Adjust the caption's font, padding, and vertical offset in Settings > One Goal. The default font is 7pt.
+- Choose a countdown underline or a fixed-size ring around the visualizer. Both use the existing Player tinting setting.
 - Click the caption to edit. With no goal, open One Goal beside Shelf or from the notch's right-click menu.
-- A countdown is optional. Expiry is silent and does not complete the goal.
+- Use 15/25/50-minute presets or a custom duration from one second to 24 hours. Pause, resume, restart, or clear the timer.
+- Choose a completion sound and volume, or Silent. Expiry never completes the goal.
 - Complete clears the goal and countdown, including their saved state. No history is kept.
 - Right-click the notch to open Settings or quit mynotch.
 
@@ -20,7 +22,7 @@ xcodebuild -project boringNotch.xcodeproj -scheme boringNotch \
 open /tmp/mynotch-build/Build/Products/Debug/mynotch.app
 ```
 
-Run the isolated goal/countdown tests with `scripts/test-one-goal.sh`. An optional native UI smoke test is in `Tests/OneGoalUISmoke.swift`. See [One Goal implementation and manual checks](docs/one-goal.md).
+Run `scripts/test-one-goal.sh` for background model, layout, and offscreen renderer checks. They use isolated preferences, do not launch mynotch, and never send input, change app focus, or play sounds. See [One Goal implementation and manual checks](docs/one-goal.md).
 
 The upstream README and attribution follow.
 

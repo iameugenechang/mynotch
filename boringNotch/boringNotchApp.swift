@@ -24,6 +24,12 @@ struct DynamicNotchApp: App {
         updaterController = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
 
+        // One completion monitor for the entire app, not one per display/view.
+        OneGoalStore.shared.onCountdownFinished = {
+            OneGoalSoundPlayer.shared.playSelectedSound()
+        }
+        OneGoalStore.shared.startMonitoringCountdown()
+
         // Initialize the settings window controller with the updater controller
         SettingsWindowController.shared.setUpdaterController(updaterController)
     }

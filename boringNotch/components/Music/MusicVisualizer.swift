@@ -27,31 +27,49 @@ class AudioSpectrum: NSView {
     }
 
     private func setupBars() {
-        let barWidth: CGFloat = 2
-        let barCount = 4
-        let spacing: CGFloat = barWidth
-        let totalWidth = CGFloat(barCount) * (barWidth + spacing)
-        let totalHeight: CGFloat = 14
-        frame.size = CGSize(width: totalWidth, height: totalHeight)
-
-        for i in 0 ..< barCount {
-            let xPosition = CGFloat(i) * (barWidth + spacing)
+        for _ in 0 ..< 4 {
             let barLayer = CAShapeLayer()
-            barLayer.frame = CGRect(x: xPosition, y: 0, width: barWidth, height: totalHeight)
             barLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-            barLayer.position = CGPoint(x: xPosition + barWidth / 2, y: totalHeight / 2)
             barLayer.fillColor = NSColor.white.cgColor
             barLayer.backgroundColor = NSColor.white.cgColor
             barLayer.allowsGroupOpacity = false
             barLayer.masksToBounds = true
-            let path = NSBezierPath(roundedRect: CGRect(x: 0, y: 0, width: barWidth, height: totalHeight),
-                                    xRadius: barWidth / 2,
-                                    yRadius: barWidth / 2)
-            barLayer.path = path.cgPath
             barLayers.append(barLayer)
             barScales.append(0.35)
             layer?.addSublayer(barLayer)
         }
+        layoutBars()
+    }
+
+    override func layout() {
+        super.layout()
+        layoutBars()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        layoutBars()
+    }
+
+    private func layoutBars() {
+        guard bounds.width > 0, bounds.height > 0, !barLayers.isEmpty else { return }
+        let barWidth = min(2, bounds.width / CGFloat(2 * barLayers.count - 1))
+        let totalWidth = CGFloat(2 * barLayers.count - 1) * barWidth
+        let height = min(14, bounds.height)
+        let startX = bounds.midX - totalWidth / 2
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (index, bar) in barLayers.enumerated() {
+            bar.bounds = CGRect(x: 0, y: 0, width: barWidth, height: height)
+            bar.position = CGPoint(x: startX + CGFloat(index) * 2 * barWidth + barWidth / 2, y: bounds.midY)
+            bar.path = NSBezierPath(
+                roundedRect: bar.bounds,
+                xRadius: barWidth / 2,
+                yRadius: barWidth / 2
+            ).cgPath
+        }
+        CATransaction.commit()
     }
     
     private func startAnimating() {

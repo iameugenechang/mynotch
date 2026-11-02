@@ -2,57 +2,72 @@
 
 ## Behavior
 
-Click the centered goal caption inside the menu-bar-height notch to open the One Goal tab next to Shelf. With no active goal, use the One Goal tab or right-click the notch and select One Goal. Nothing extra is drawn in the empty state. Hovering the caption does not open another tab first.
+Click the goal caption to open One Goal beside Home and Shelf. With no goal, use the tab or right-click the notch and choose One Goal. The empty state adds no caption or timer.
 
-Save or Return commits the goal text. Blank or whitespace-only text clears it. Cancel or Escape discards the text draft and collapses the notch. Clicking another app also dismisses the draft. Complete clears the saved goal and countdown immediately.
+Save or Return commits the goal. Blank text clears it. Cancel, Escape, an upward close gesture, or switching to another app discards the text draft and closes the editor. Moving the pointer away does not dismiss active editing. Complete deletes the saved goal and countdown. There are no lists, history, or completion statistics.
 
-Enter 1 to 1440 minutes and click Start to save the current goal and begin an optional countdown. Restart starts the entered duration again. Clear removes only the countdown. Cancel does not undo a countdown already started or cleared. A 1pt underline beneath the goal shows the remaining fraction; the caption tooltip and editor show the exact remaining time. Without a countdown, there is no line or empty track. Expiry is silent and never completes a goal.
+The timer card offers 15/25/50-minute presets and a visible Custom control for minutes and seconds. Durations range from one second to 24 hours. Starting a countdown saves the current goal. Pause freezes the remaining time; Resume rebuilds the deadline. Restart uses the original duration, including custom seconds. Clear removes only the timer. Dismissing an unsaved text draft does not undo timer actions already taken.
 
-## State and layout
+Expiry leaves the goal in place and marks the countdown Finished. Settings > One Goal offers Glass (default), Tink, Pop, Ping, and Silent, with volume and preview controls. One app-level monitor handles expiry once, even with multiple displays. A countdown that expired while the app was closed is marked finished silently on launch.
 
-- `models/OneGoal.swift` contains the current text and optional countdown duration/deadline.
-- `models/OneGoalStore.swift` writes one Codable snapshot to UserDefaults under `oneGoal.current`. Emptying or completing the goal removes the key. There is no completion history.
-- A deadline, rather than a decrementing counter, keeps the countdown correct across sleep and relaunches. Remaining time is clamped to zero and the original duration.
-- `components/OneGoal/OneGoalViews.swift` contains the 8pt caption, countdown underline, and editor. TimelineView refreshes the underline and remaining time once a second without notifications, sounds, or continuous animations.
-- There is no separate timer icon or extra notch shoulder. The music layout is symmetric again. The expanded body keeps its original 640 by 190 point size.
-- The caption is forced into the bottom 12pt of the menu bar, horizontally centered over the notch. Its 6pt invisible click extension goes upward, keeping the full 18pt target inside the bar. There is no lip or separate caption backing, and neither the text nor underline extends below the bar. The collapsed header is constrained to that same height. The caption stays pinned to this position when expanded.
-- Menu-bar height comes from the selected display's frame/visible-frame top inset, with a status-bar/notch-height fallback when the bar is auto-hidden. The tested display reports a 33pt menu bar and a 32pt camera safe area. Text placement deliberately ignores the safe-area floor for this experiment. UI geometry checks prove the bounds, not whether the physical camera masks any glyphs; inspect readability on the actual display.
-- Right-clicking the notch or goal caption offers One Goal, Settings, and Quit mynotch.
-- Goal visibility is independent of media fullscreen hiding. Existing selected-display/all-displays settings still decide where notch windows exist. All displays share one saved goal.
-- Only the explicitly opened One Goal editor allows its panel to become key. Automatic hover/drop/shortcut closure is blocked during editing. Save, Cancel, Complete, and losing keyboard focus end that protection. Switching tabs releases input focus.
-- The app has its own bundle identifier, `com.iameugenechang.mynotch`, and helper identifier. The upstream update feed is removed and the updater is not started.
+## Layout and settings
 
-## Automated checks
+- The goal uses the main notch's full width, black background, and clipping shape, including media extensions. It is not a separate badge or nested notch.
+- The caption stays at the bottom during expansion. Standard and inline previews reserve a footer rather than placing the goal over preview content.
+- Settings > One Goal controls font size (7pt default), text padding, and vertical offset. Caption height follows native font metrics. Offset can place the text below the physical camera cutout.
+- The countdown can be an underline at the top or bottom of the caption, or a ring around the visualizer. The underline remembers the collapsed inner width through expansion and previews. The ring stays 20 by 20 points with a centered 10 by 10 point spectrum.
+- Goal text, underline, and ring use the existing Player tinting setting. There is no separate goal color setting.
+- Settings > Media > Keep visible while paused is enabled by default. It keeps real track metadata visible, not the startup placeholder. Turning it off restores the inactivity timeout.
+- Right-click offers One Goal, countdown controls when applicable, Settings, and Quit mynotch.
+- Display selection, all-displays mode, and existing media/fullscreen controls remain in place. All displays share the same saved goal.
 
-Run `scripts/test-one-goal.sh`. It compiles the actual model/store against an isolated preferences suite and checks normalization, persistence, completion, invalid state, duration limits, expiry, countdown fractions, and sleep/relaunch behavior. It does not drive the macOS interface.
+Physical readability still needs a person looking at the display. Offscreen geometry cannot tell whether a camera cutout hides text.
 
-Build the existing `boringNotch` scheme. The product is `mynotch.app`.
+## Implementation
 
-For the optional native UI smoke test, run:
+- `models/OneGoal.swift` contains the Codable snapshot, duration parser, sound choices, and deterministic caption/layout rules.
+- `models/OneGoalStore.swift` persists one snapshot under `oneGoal.current`. Emptying or completing the goal removes the key. Optional pause and handled-completion fields keep older snapshots readable.
+- Running countdowns use a wall-clock deadline, not a decrementing counter, so sleep time is included. Paused countdowns retain their remaining duration across relaunches. Tests inject a clock without changing production timekeeping.
+- The store owns one completion monitor in the main run loop's common modes. It saves the handled flag before invoking the sound callback and stops monitoring paused, finished, or removed timers.
+- `components/OneGoal/OneGoalViews.swift` contains the caption, timer styles, settings, and editor. `ContentView.swift` owns the shared clipping shape and stable timer-width tracking.
+- `components/Music/MusicVisualizer.swift` lays out its actual AppKit layers within their current bounds. `models/PlaybackState.swift` defines the tested paused-media visibility policy.
+- Only an explicitly opened goal editor permits its panel to become key. Hover closure stays blocked while editing; explicit dismissal releases that protection.
+- The fork uses `com.iameugenechang.mynotch` and its own helper identifier. The upstream updater does not start.
+
+## Background checks
+
+Run:
 
 ```bash
-xcrun swift Tests/OneGoalUISmoke.swift /tmp/mynotch-build/Build/Products/Debug/mynotch.app
+scripts/test-one-goal.sh
 ```
 
-This requires Accessibility permission and interacts with the real interface. It refuses to overwrite an existing saved goal. It checks keyboard entry, hover, navigation, countdown controls, relaunch persistence, text-sized labels, unchanged notch dimensions, loss of focus, completion, and right-click Quit. On success it leaves no saved goal and quits the test app through the notch menu. It temporarily skips upstream onboarding through launch arguments, without changing the saved onboarding preference. To test an isolated copy with a different bundle identifier, set `MYNOTCH_UI_BUNDLE_ID` to that identifier.
+The script compiles production sources directly with the macOS SDK. It needs no third-party test framework and does not build or launch the app.
+
+`Tests/OneGoalTests.swift` checks normalization, Unicode storage, corrupt/legacy snapshots, duration bounds and parsing, countdown fractions, pause/resume/restart, clearing/completion, sleep/relaunch behavior, exactly-once completion, and the real Foundation completion scheduler. Layout checks cover collapsed, expanded, and preview footer geometry across font heights and offsets. Media checks cover the paused-player visibility policy.
+
+`Tests/OneGoalRendererTests.swift` creates offscreen AppKit spectrum layers without windows or activation. It checks centering, clipping, resizing, paused bars, native font metrics, and sound-file loading. It never plays audio.
+
+Both suites leave the running app and its preferences alone. They do not move the pointer, synthesize keys, change app focus, capture the screen, hide applications, or request Accessibility access. The previous interactive UI smoke script has been removed rather than run during normal work.
+
+GitHub Actions runs these same checks on macOS. To check app compilation separately without opening it:
+
+```bash
+xcodebuild -project boringNotch.xcodeproj -scheme boringNotch \
+  -configuration Debug -destination 'platform=macOS' \
+  -derivedDataPath /tmp/mynotch-build CODE_SIGNING_ALLOWED=NO build
+```
 
 ## Manual acceptance checks
 
-Checked items below passed native smoke testing on one notched MacBook display. The remaining cases need suitable displays or further manual testing. A successful build or model test alone does not prove these interactions.
+These are not automated background checks. Run them only when you choose to interact with the app. Current model/renderer passes do not establish that every UI interaction works.
 
-- [x] With music idle and no active goal, open One Goal from the notch's right-click menu and save a goal with Return.
-- [ ] Focus another app and inspect the physical display. Confirm the 8pt goal is readable inside the menu bar and not obscured by the camera.
-- [x] Hover the caption without clicking. Confirm the notch stays collapsed, and normal notch hover still expands it.
-- [x] Click the goal. Move the pointer away and continue typing; the editor must stay open.
-- [x] Cancel with Escape and by clicking another app. Confirm unsaved text is discarded and the other app keeps keyboard focus.
-- [x] Switch from One Goal to Home/Shelf. Confirm the editor exits and both tabs remain navigable.
-- [x] Quit and relaunch. Confirm only the saved active goal/countdown return.
-- [ ] Start a one-minute countdown, sleep/wake, and let it expire. Confirm the underline empties without sound, notification, or goal completion.
-- [x] Clear the countdown, then complete a goal. Confirm each action clears only the intended state, and a completed goal does not return after relaunch.
-- [x] Save and reopen short and long goals. Confirm the caption hugs the text up to its width cap and retains the full saved text. The notch body's size must not change. The caption stays horizontally centered, with its bottom edge at the menu bar's bottom in collapsed and expanded modes.
-- [x] Confirm no standalone timer icon remains. Start a countdown and verify the caption's remaining time updates; clearing the countdown removes its progress state.
-- [x] Right-click the notch and choose Quit mynotch. Confirm Settings remains available and Quit terminates the app.
-- [ ] Try Unicode/emoji, pasted newlines, and whitespace-only text in the interface. Confirm tail truncation, full tooltip text, and an empty collapsed state.
-- [ ] Check playing/paused music, inline and standard sneak peeks, battery notices, volume/brightness HUDs, drag-and-drop Shelf, calendar, and camera.
-- [ ] Test custom notch heights, smaller display scaling, and a crowded menu bar. Verify that the caption stays readable and nearby menu items remain usable.
-- [ ] Test full-screen Spaces on notched and external displays, all-displays mode, and unplugging/reconnecting a display. Open the editor on each display and verify focus stays on the clicked one.
+- [ ] Check caption readability on the physical display with short, long, and Unicode goals, different font sizes, and crowded menu bars.
+- [ ] Save with Return; cancel with Escape, focus loss, and upward swipe. Confirm hover exit preserves editing and explicit dismissal discards only the draft.
+- [ ] Try presets and custom seconds; pause/resume, restart, clear, and relaunch. Confirm only one active goal/countdown returns.
+- [ ] Let a timer finish while the editor is closed and open. Check each sound and volume, and confirm expiry never completes the goal or plays twice.
+- [ ] Compare the underline through expansion, standard/inline previews, battery notices, and volume/brightness HUDs. Confirm the goal stays below preview content.
+- [ ] Check the ring around playing and paused bars in collapsed and expanded views. Verify Player tinting applies to text and progress together.
+- [ ] Toggle Keep visible while paused, stop the media app, and check Home, Shelf drag-and-drop, calendar, and camera.
+- [ ] Complete a goal and relaunch; verify no saved goal or timer returns. Check right-click Settings and Quit.
+- [ ] Check fullscreen Spaces, external displays, all-displays mode, display reconnects, and editor focus transfer between displays.

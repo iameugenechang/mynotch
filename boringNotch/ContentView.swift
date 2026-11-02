@@ -24,10 +24,18 @@ struct ContentView: View {
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
     @ObservedObject private var goalStore = OneGoalStore.shared
+    @Default(.oneGoalFontSize) private var oneGoalFontSize
+    @Default(.oneGoalTextPadding) private var oneGoalTextPadding
+    @Default(.oneGoalTimerStyle) private var oneGoalTimerStyle
+    @Default(.oneGoalVerticalOffset) private var oneGoalVerticalOffset
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var isHoveringGoalControl = false
     @State private var isPointerInsideNotch = false
+    @State private var notchContentSize = CGSize.zero
+    @State private var collapsedTimerWidth: CGFloat = 0
+    @State private var timerTracksClosedWidth = true
+    @State private var timerResizeTask: Task<Void, Never>?
     @State private var anyDropDebounceTask: Task<Void, Never>?
 
     @State private var gestureProgress: CGFloat = .zero
@@ -37,6 +45,7 @@ struct ContentView: View {
     @Namespace var albumArtNamespace
 
     @Default(.useMusicVisualizer) var useMusicVisualizer
+    @Default(.keepMediaVisibleWhenPaused) private var keepMediaVisibleWhenPaused
 
     @Default(.showNotHumanFace) var showNotHumanFace
 
@@ -67,8 +76,8 @@ struct ContentView: View {
         return max(24, vm.effectiveClosedNotchHeight, screen?.safeAreaInsets.top ?? 0)
     }
 
-    // Pin the goal to the bottom of the menu bar, deliberately ignoring the
-    // camera safe area for text placement so this compact layout can be tried.
+    // Use the menu bar as the caption baseline. Vertical offset can extend
+    // the shared silhouette below the camera cutout.
     private var goalMenuBarHeight: CGFloat {
         let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
         guard let screen else { return NSStatusBar.system.thickness }
@@ -76,6 +85,63 @@ struct ContentView: View {
         if visibleInset > 0 { return visibleInset }
         // The menu bar can be hidden in fullscreen; keep a stable compact band.
         return max(NSStatusBar.system.thickness, screen.safeAreaInsets.top)
+    }
+
+    private var oneGoalBarHeight: CGFloat {
+        oneGoalCaptionHeight(fontSize: oneGoalFontSize, padding: oneGoalTextPadding)
+    }
+
+    private var showsMediaPlayer: Bool {
+        MediaVisibilityPolicy.shouldShowPlayer(isPlaying: musicManager.isPlaying, isIdle: musicManager.isPlayerIdle,
+            keepWhilePaused: keepMediaVisibleWhenPaused, hasTrack: musicManager.hasCurrentTrack)
+    }
+
+    private var showsGoal: Bool {
+        !coordinator.helloAnimationRunning && !goalStore.goal.text.isEmpty
+    }
+
+    private var showsNotchPreview: Bool {
+        vm.notchState == .closed && (coordinator.sneakPeek.show || coordinator.expandingView.show)
+    }
+
+    private var goalLayout: OneGoalLayout {
+        OneGoalLayout(menuBarHeight: goalMenuBarHeight, captionHeight: oneGoalBarHeight,
+                      hitPadding: goalCaptionHitPadding, verticalOffset: oneGoalVerticalOffset)
+    }
+
+    private var goalExtensionHeight: CGFloat {
+        guard showsGoal else { return 0 }
+        let bodyHeight = vm.notchState == .open ? vm.notchSize.height : max(notchContentSize.height, goalMenuBarHeight)
+        return goalLayout.extensionHeight(contentHeight: bodyHeight, isPreview: showsNotchPreview)
+    }
+
+    private var goalTimerWidth: CGFloat {
+        collapsedTimerWidth > 0 ? collapsedTimerWidth
+            : OneGoalLayout.timerWidth(notchWidth: vm.closedNotchSize.width,
+                                      curveInset: cornerRadiusInsets.closed.top + cornerRadiusInsets.closed.bottom)
+    }
+
+    private func updateCollapsedTimerWidth() {
+        collapsedTimerWidth = OneGoalLayout.timerWidth(notchWidth: notchContentSize.width,
+            curveInset: cornerRadiusInsets.closed.top + cornerRadiusInsets.closed.bottom)
+    }
+
+    private func refreshTimerTracking() {
+        timerResizeTask?.cancel()
+        timerTracksClosedWidth = false
+        guard vm.notchState == .closed, !showsNotchPreview else { return }
+        // Resume only after both expansion and temporary previews have settled.
+        timerResizeTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled, vm.notchState == .closed, !showsNotchPreview else { return }
+            updateCollapsedTimerWidth()
+            timerTracksClosedWidth = true
+        }
+    }
+
+    private var goalCurvePadding: CGFloat {
+        topCornerRadius + ((vm.notchState == .open && Defaults[.cornerRadiusScaling])
+            ? cornerRadiusInsets.opened.bottom : cornerRadiusInsets.closed.bottom)
     }
 
     var body: some View {
@@ -99,7 +165,31 @@ struct ContentView: View {
                     )
                     .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil, alignment: .top)
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                        notchContentSize = size
+                        if vm.notchState == .closed && timerTracksClosedWidth && !showsNotchPreview {
+                            updateCollapsedTimerWidth()
+                        }
+                    }
+                    .padding(.bottom, goalExtensionHeight)
                     .background(.black)
+                    .overlay(alignment: .top) {
+                        if showsGoal {
+                            GeometryReader { geometry in
+                                OneGoalLabel(
+                                    width: geometry.size.width,
+                                    horizontalPadding: goalCurvePadding,
+                                    timerWidth: goalTimerWidth,
+                                    action: openGoalEditor
+                                )
+                                .onHover(perform: handleGoalHover)
+                                .contextMenu { notchContextMenu }
+                                .offset(y: goalLayout.captionOrigin(bodyHeight: geometry.size.height))
+                            }
+                        }
+                    }
+                    // Clip body, goal, and timer together, giving the entire
+                    // silhouette one shared width and outer curve.
                     .clipShape(currentNotchShape)
                     .overlay(alignment: .top) {
                         Rectangle()
@@ -157,7 +247,11 @@ struct ContentView: View {
                     .onChange(of: coordinator.currentView) { _, newView in
                         if newView != .goal { vm.isGoalEditorActive = false }
                     }
+                    .onChange(of: showsNotchPreview) { _, _ in
+                        refreshTimerTracking()
+                    }
                     .onChange(of: vm.notchState) { _, newState in
+                        refreshTimerTracking()
                         if newState == .closed && isHovering {
                             withAnimation {
                                 isHovering = false
@@ -184,13 +278,6 @@ struct ContentView: View {
                     .accessibilityIdentifier("notch-body")
             }
 
-            // The caption and underline stay entirely inside the menu bar.
-            if !coordinator.helloAnimationRunning && !goalStore.goal.text.isEmpty {
-                OneGoalLabel(maxWidth: vm.closedNotchSize.width - 20, action: openGoalEditor)
-                    .onHover(perform: handleGoalHover)
-                    .contextMenu { notchContextMenu }
-                    .offset(y: max(0, goalMenuBarHeight - goalLabelHeight - goalCaptionHitPadding))
-            }
         }
         .padding(.bottom, 8)
         .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
@@ -278,7 +365,7 @@ struct ContentView: View {
                         } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                             InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                                 .transition(.opacity)
-                        } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
+                        } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && showsMediaPlayer && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                             MusicLiveActivity()
                                 .frame(alignment: .center)
                         } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed {
@@ -447,7 +534,10 @@ struct ContentView: View {
                 )
 
             HStack {
-                if useMusicVisualizer {
+                if oneGoalTimerStyle == .visualizerRing && goalStore.goal.countdown != nil {
+                    OneGoalRingVisualizer(action: openGoalEditor)
+                        .onHover(perform: handleGoalHover)
+                } else if useMusicVisualizer {
                     Rectangle()
                         .fill(
                             Defaults[.coloredSpectrogram]
@@ -503,6 +593,19 @@ struct ContentView: View {
     @ViewBuilder
     private var notchContextMenu: some View {
         Button("One Goal", action: openGoalEditor)
+        if let countdown = goalStore.goal.countdown {
+            if !countdown.isFinished {
+                Button(countdown.isPaused ? "Resume timer" : "Pause timer") {
+                    if countdown.isPaused {
+                        goalStore.resumeCountdown()
+                    } else {
+                        goalStore.pauseCountdown()
+                    }
+                }
+            }
+            Button("Restart timer") { goalStore.restartCountdown() }
+            Button("Clear timer", action: goalStore.clearCountdown)
+        }
         Divider()
         Button("Settings") {
             DispatchQueue.main.async {
@@ -615,7 +718,8 @@ struct ContentView: View {
     }
 
     private func handleUpGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .open && !vm.isHoveringCalendar else { return }
+        guard vm.notchState == .open,
+              coordinator.currentView == .goal || !vm.isHoveringCalendar else { return }
 
         withAnimation(animationSpring) {
             gestureProgress = (translation / Defaults[.gestureSensitivity]) * -20
@@ -631,8 +735,12 @@ struct ContentView: View {
             withAnimation(animationSpring) {
                 isHovering = false
             }
-            if !SharingStateManager.shared.preventNotchClose { 
+            if !SharingStateManager.shared.preventNotchClose {
+                hoverTask?.cancel()
                 gestureProgress = .zero
+                // A deliberate close gesture is equivalent to Cancel, not a
+                // hover exit. Release the editor's automatic-close protection.
+                vm.isGoalEditorActive = false
                 vm.close()
             }
 

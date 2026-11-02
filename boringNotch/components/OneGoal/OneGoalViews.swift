@@ -1,8 +1,21 @@
+import Defaults
 import SwiftUI
+
+private func oneGoalPlayerTint(_ color: NSColor, enabled: Bool) -> Color {
+    enabled ? Color(nsColor: color).ensureMinimumBrightness(factor: 0.6) : .gray
+}
 
 struct OneGoalLabel: View {
     @ObservedObject private var store = OneGoalStore.shared
-    let maxWidth: CGFloat
+    @ObservedObject private var musicManager = MusicManager.shared
+    @Default(.playerColorTinting) private var playerColorTinting
+    @Default(.oneGoalFontSize) private var fontSize
+    @Default(.oneGoalTextPadding) private var textPadding
+    @Default(.oneGoalTimerStyle) private var timerStyle
+    @Default(.oneGoalTimerPosition) private var timerPosition
+    let width: CGFloat
+    let horizontalPadding: CGFloat
+    let timerWidth: CGFloat
     var action: () -> Void
 
     var body: some View {
@@ -11,7 +24,7 @@ struct OneGoalLabel: View {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     caption(
                         fraction: countdown.fractionRemaining(at: context.date),
-                        remaining: countdown.remainingText(at: context.date)
+                        remaining: countdown.statusText(at: context.date)
                     )
                 }
             } else {
@@ -20,118 +33,269 @@ struct OneGoalLabel: View {
         }
     }
 
+    private var textColor: Color {
+        oneGoalPlayerTint(musicManager.avgColor, enabled: playerColorTinting)
+    }
+
+    private var barHeight: CGFloat {
+        oneGoalCaptionHeight(fontSize: fontSize, padding: textPadding)
+    }
+
     private func caption(fraction: Double?, remaining: String?) -> some View {
         Button(action: action) {
             Text(store.goal.text)
-                .font(.system(size: 8))
-                .foregroundStyle(.white.opacity(0.8))
+                .font(.system(size: fontSize))
+                .foregroundStyle(textColor)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .padding(.horizontal, 4)
-                .padding(.bottom, 1)
-                .frame(maxWidth: max(0, maxWidth))
-                .fixedSize(horizontal: true, vertical: false)
-                .frame(height: goalLabelHeight)
-                .overlay(alignment: .bottom) {
-                    if let fraction {
-                        GeometryReader { geometry in
-                            Rectangle()
-                                .fill(.white.opacity(0.7))
-                                .frame(width: geometry.size.width * fraction, height: 1)
-                        }
-                        .frame(height: 1)
-                        .padding(.horizontal, 2)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, textPadding)
+                .padding(timerPosition == .top ? .top : .bottom, 1)
+                .frame(width: max(0, width))
+                .frame(height: barHeight)
+                .overlay(alignment: timerPosition == .top ? .top : .bottom) {
+                    if let fraction, timerStyle == .underline {
+                        Rectangle()
+                            .fill(textColor)
+                            .frame(width: max(0, timerWidth) * fraction, height: 1)
+                            .frame(width: max(0, timerWidth), alignment: .leading)
                         .accessibilityHidden(true)
                     }
                 }
-                // Expand the hit target upward, not below the menu bar.
+                .clipped()
+                // Extra input area stays invisible when the bar is short.
                 .padding(.top, goalCaptionHitPadding)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(remaining.map { "\(store.goal.text) (\($0) remaining)" } ?? store.goal.text)
+        .help(remaining.map { "\(store.goal.text) (\($0))" } ?? store.goal.text)
         .accessibilityLabel("Edit goal: \(store.goal.text)")
-        .accessibilityValue(remaining.map { "\($0) remaining" } ?? "No countdown")
+        .accessibilityValue(remaining ?? "No countdown")
         .accessibilityIdentifier("one-goal-label")
         .transaction { $0.disablesAnimations = true }
+    }
+}
+
+struct OneGoalAppearanceSettings: View {
+    @Default(.oneGoalCompletionSound) private var completionSound
+    @Default(.oneGoalSoundVolume) private var soundVolume
+    @Default(.oneGoalFontSize) private var fontSize
+    @Default(.oneGoalTextPadding) private var textPadding
+    @Default(.oneGoalVerticalOffset) private var verticalOffset
+    @Default(.oneGoalTimerStyle) private var timerStyle
+    @Default(.oneGoalTimerPosition) private var timerPosition
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Text size") {
+                    HStack {
+                        Slider(value: $fontSize, in: 5...24, step: 1)
+                            .frame(width: 180)
+                        Text("\(Int(fontSize))").monospacedDigit().frame(width: 32)
+                    }
+                }
+                LabeledContent("Text padding") {
+                    HStack {
+                        Slider(value: $textPadding, in: 0...12, step: 1)
+                            .frame(width: 180)
+                        Text("\(Int(textPadding))").monospacedDigit().frame(width: 32)
+                    }
+                }
+                LabeledContent("Vertical offset") {
+                    HStack {
+                        Slider(value: $verticalOffset, in: -24...64, step: 1)
+                            .frame(width: 180)
+                        Text("\(Int(verticalOffset))").monospacedDigit().frame(width: 32)
+                    }
+                }
+            } header: {
+                Text("Layout")
+            } footer: {
+                Text("Height follows the text size automatically. Padding adds space above and below the text. Positive offset moves the collapsed goal down; expansion keeps it at the bottom.")
+            }
+
+            Section {
+                Picker("Display", selection: $timerStyle) {
+                    Text("Underline").tag(OneGoalTimerStyle.underline)
+                    Text("Visualizer ring").tag(OneGoalTimerStyle.visualizerRing)
+                }
+                .pickerStyle(.segmented)
+                if timerStyle == .underline {
+                    Picker("Position", selection: $timerPosition) {
+                        Text("Top").tag(OneGoalTimerPosition.top)
+                        Text("Bottom").tag(OneGoalTimerPosition.bottom)
+                    }
+                    .pickerStyle(.segmented)
+                }
+            } header: {
+                Text("Countdown")
+            } footer: {
+                Text("Text and timer both follow Player tinting in Appearance. The ring surrounds the music visualizer when visible; the goal tooltip always shows the exact remaining time.")
+            }
+
+            Section {
+                Picker("Sound", selection: $completionSound) {
+                    ForEach(OneGoalCompletionSound.allCases, id: \.self) { sound in
+                        Text(sound.label).tag(sound)
+                    }
+                }
+                LabeledContent("Volume") {
+                    HStack {
+                        Slider(value: $soundVolume, in: 0...1, step: 0.05)
+                            .frame(width: 180)
+                        Text("\(Int((soundVolume * 100).rounded()))%")
+                            .monospacedDigit().frame(width: 44)
+                    }
+                }
+                .disabled(completionSound == .silent)
+                Button("Preview sound", action: OneGoalSoundPlayer.shared.playSelectedSound)
+                    .disabled(completionSound == .silent || soundVolume == 0)
+            } header: {
+                Text("Timer finished")
+            } footer: {
+                Text("Plays once when the countdown reaches zero. The goal stays active until you complete it. Choose Silent for no sound.")
+            }
+
+            Section {
+                Button("Reset layout") {
+                    fontSize = 7
+                    textPadding = 1
+                    verticalOffset = 12
+                    timerStyle = .underline
+                    timerPosition = .bottom
+                }
+            }
+        }
+        .navigationTitle("One Goal")
     }
 }
 
 struct OneGoalView: View {
     @EnvironmentObject private var vm: BoringViewModel
     @ObservedObject private var store = OneGoalStore.shared
+    @ObservedObject private var musicManager = MusicManager.shared
+    @Default(.playerColorTinting) private var playerColorTinting
     @State private var draft = ""
     @State private var minutes = "25"
+    @State private var seconds = "00"
+    @State private var editingTime = false
     @FocusState private var focusedField: Field?
 
-    private enum Field: Hashable { case goal, minutes }
+    private enum Field: Hashable { case goal, minutes, seconds }
 
     private var duration: Int? {
-        guard let value = Int(minutes), (1...1440).contains(value) else { return nil }
-        return value
+        OneGoal.Countdown.parseDuration(minutes: minutes, seconds: seconds)
+    }
+
+    private var customDurationSelected: Bool {
+        if editingTime { return true }
+        let total = store.goal.countdown.map { Int($0.duration) } ?? duration
+        return total.map { ![900, 1500, 3000].contains($0) } ?? false
+    }
+
+    private var tint: Color {
+        oneGoalPlayerTint(musicManager.avgColor, enabled: playerColorTinting)
+    }
+
+    private var settingTime: Bool { editingTime || store.goal.countdown == nil }
+
+    private var timerStatus: String {
+        guard let countdown = store.goal.countdown else { return "Optional countdown" }
+        if editingTime { return "Set duration" }
+        if countdown.isFinished { return "Finished" }
+        return countdown.isPaused ? "Paused" : "Time remaining"
+    }
+
+    private var timerActionLabel: String {
+        if settingTime { return editingTime ? "Set timer" : "Start timer" }
+        if store.goal.countdown?.isFinished == true { return "Restart timer" }
+        return store.goal.countdown?.isPaused == true ? "Resume timer" : "Pause timer"
+    }
+
+    private var timerActionIcon: String {
+        if editingTime { return "checkmark" }
+        if store.goal.countdown?.isFinished == true { return "arrow.clockwise" }
+        return settingTime || store.goal.countdown?.isPaused == true ? "play.fill" : "pause.fill"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("What does done mean?")
-                .font(.caption)
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Your goal", systemImage: "pencil")
+                        .font(.system(size: 11, weight: .medium))
+                    Spacer()
+                }
                 .foregroundStyle(.secondary)
 
-            TextField("One clear outcome", text: $draft)
-                .textFieldStyle(.roundedBorder)
-                .focused($focusedField, equals: .goal)
-                .onSubmit(save)
-                .accessibilityLabel("Goal")
-
-            HStack(spacing: 8) {
-                Text("Countdown")
-                    .foregroundStyle(.secondary)
-                TextField("Minutes", text: $minutes)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 50)
-                    .focused($focusedField, equals: .minutes)
-                    .onSubmit(startCountdown)
-                    .accessibilityLabel("Countdown minutes")
-                    .help("Optional, from 1 to 1440 minutes")
-                Text("min")
-                    .foregroundStyle(.secondary)
-                Button(store.goal.countdown == nil ? "Start" : "Restart", action: startCountdown)
-                    .disabled(duration == nil || OneGoal.normalized(draft).isEmpty)
-
-                if let countdown = store.goal.countdown {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(countdown.remainingText(at: context.date))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                TextField("e.g. Send the proposal to Maya", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .tint(tint)
+                    .focused($focusedField, equals: .goal)
+                    .onSubmit(save)
+                    .accessibilityLabel("Goal")
+                    .accessibilityHint("Enter one clear outcome. Press Return to save.")
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(focusedField == .goal ? tint.opacity(0.55) : Color.white.opacity(0.12), lineWidth: 1)
+                            .allowsHitTesting(false)
                     }
-                    Button("Clear", action: store.clearCountdown)
-                        .help("Remove the countdown, keeping the goal")
-                }
-                Spacer(minLength: 0)
-            }
-            .font(.caption)
+                    .contentShape(RoundedRectangle(cornerRadius: 10))
+                    .onTapGesture { focusedField = .goal }
 
-            HStack {
-                Button("Complete") {
-                    store.complete()
-                    dismiss()
-                }
-                .disabled(store.goal.text.isEmpty && OneGoal.normalized(draft).isEmpty)
-                Spacer()
-                Button("Cancel", action: dismiss)
-                    .keyboardShortcut(.cancelAction)
-                Button("Save", action: save)
+                Spacer(minLength: 0)
+
+                HStack(spacing: 10) {
+                    Button {
+                        store.complete()
+                        dismiss()
+                    } label: {
+                        Label("Complete", systemImage: "checkmark.circle")
+                            .font(.system(size: 11, weight: .medium))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(.white.opacity(0.06), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.goal.text.isEmpty && OneGoal.normalized(draft).isEmpty)
+
+                    Spacer(minLength: 0)
+
+                    Button("Cancel", action: dismiss)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        .keyboardShortcut(.cancelAction)
+
+                    Button(action: save) {
+                        Text("Save")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(tint)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(tint.opacity(0.16), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
+                }
             }
-            .controlSize(.small)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            timerCard
         }
-        .padding(.top, 2)
+        .frame(height: 126)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(OneGoalInputFocus(isEditing: vm.isGoalEditorActive))
         .task {
             draft = store.goal.text
             if let countdown = store.goal.countdown {
-                minutes = String(Int(countdown.duration / 60))
+                setDurationFields(countdown.duration)
             }
             await Task.yield()
             if vm.isGoalEditorActive { focusedField = .goal }
@@ -142,7 +306,180 @@ struct OneGoalView: View {
         .onDisappear {
             focusedField = nil
             draft = ""
+            editingTime = false
             vm.isGoalEditorActive = false
+        }
+    }
+
+    private var timerCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(timerStatus)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                if store.goal.countdown != nil {
+                    timerIcon("arrow.counterclockwise", label: "Restart timer") {
+                        store.restartCountdown()
+                        if let countdown = store.goal.countdown {
+                            setDurationFields(countdown.duration)
+                        }
+                        editingTime = false
+                        focusedField = nil
+                    }
+                    timerIcon("xmark", label: editingTime ? "Cancel duration change" : "Clear timer") {
+                        if editingTime, let countdown = store.goal.countdown {
+                            setDurationFields(countdown.duration)
+                        } else {
+                            store.clearCountdown()
+                        }
+                        editingTime = false
+                        focusedField = nil
+                    }
+                }
+            }
+            .frame(height: 18)
+
+            HStack(alignment: .center, spacing: 6) {
+                timerValue
+                    .font(.system(size: 27, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
+                Spacer(minLength: 0)
+                Button(action: handleTimerAction) {
+                    Image(systemName: timerActionIcon)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 32, height: 32)
+                        .background(tint.opacity(0.15), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(timerActionLabel)
+                .accessibilityLabel(timerActionLabel)
+                .disabled(settingTime && (duration == nil || OneGoal.normalized(draft).isEmpty))
+            }
+            .frame(height: 34)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 6) {
+                ForEach([15, 25, 50], id: \.self) { preset in
+                    let selected = store.goal.countdown.map { $0.duration == TimeInterval(preset * 60) }
+                        ?? (duration == preset * 60)
+                    Button {
+                        minutes = String(preset)
+                        seconds = "00"
+                        if store.goal.countdown != nil { startCountdown() }
+                    } label: {
+                        Text("\(preset)m")
+                            .font(.system(size: 10, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(selected ? tint : Color.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 5)
+                            .background(selected ? tint.opacity(0.13) : Color.white.opacity(0.04), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help(store.goal.countdown == nil ? "Choose \(preset) minutes" : "Restart with \(preset) minutes")
+                    .disabled(store.goal.countdown != nil && OneGoal.normalized(draft).isEmpty)
+                }
+                Button(action: editCustomTime) {
+                    Text("Custom")
+                        .font(.system(size: 9, weight: .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(customDurationSelected ? tint : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                        .background(customDurationSelected ? tint.opacity(0.13) : Color.white.opacity(0.04), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Enter minutes and seconds")
+                .accessibilityLabel("Custom countdown duration")
+            }
+        }
+        .padding(12)
+        .frame(width: 190, height: 126)
+        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(.white.opacity(0.06), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private var timerValue: some View {
+        if let countdown = store.goal.countdown, !editingTime {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Button(action: editCustomTime) {
+                    Text(countdown.remainingText(at: context.date))
+                }
+                .buttonStyle(.plain)
+                .help("Click to change duration")
+                .accessibilityLabel("Change countdown duration")
+                .accessibilityValue(countdown.statusText(at: context.date))
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                TextField("min", text: $minutes)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .focused($focusedField, equals: .minutes)
+                    .onSubmit(startCountdown)
+                    .frame(width: 60)
+                    .accessibilityLabel("Countdown minutes")
+                    .help("Minutes, from 0 to 1440")
+                Text(":")
+                    .foregroundStyle(.secondary)
+                TextField("sec", text: $seconds)
+                    .textFieldStyle(.plain)
+                    .focused($focusedField, equals: .seconds)
+                    .onSubmit(startCountdown)
+                    .frame(width: 30)
+                    .accessibilityLabel("Countdown seconds")
+                    .help("Seconds, from 0 to 59")
+            }
+            .font(.system(size: 24, weight: .medium, design: .rounded))
+            .help("Minutes : seconds. From 1 second to 24 hours.")
+        }
+    }
+
+    private func setDurationFields(_ value: TimeInterval) {
+        let total = Int(value)
+        minutes = String(total / 60)
+        seconds = String(format: "%02d", total % 60)
+    }
+
+    private func editCustomTime() {
+        if !editingTime, let countdown = store.goal.countdown {
+            setDurationFields(countdown.duration)
+        }
+        editingTime = true
+        focusedField = .minutes
+    }
+
+    private func timerIcon(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private func handleTimerAction() {
+        if settingTime {
+            startCountdown()
+        } else if store.goal.countdown?.isFinished == true {
+            store.restartCountdown()
+        } else if store.goal.countdown?.isPaused == true {
+            store.resumeCountdown()
+        } else {
+            store.pauseCountdown()
         }
     }
 
@@ -152,15 +489,73 @@ struct OneGoalView: View {
     }
 
     private func startCountdown() {
-        guard let duration else { return }
+        guard let duration, !OneGoal.normalized(draft).isEmpty else { return }
         store.save(text: draft)
-        store.startCountdown(minutes: duration)
+        store.startCountdown(seconds: duration)
+        editingTime = false
+        focusedField = nil
     }
 
     private func dismiss() {
         focusedField = nil
         vm.isGoalEditorActive = false
         vm.close()
+    }
+}
+
+struct OneGoalCountdownRing: View {
+    @ObservedObject private var store = OneGoalStore.shared
+    @ObservedObject private var musicManager = MusicManager.shared
+    @Default(.playerColorTinting) private var playerColorTinting
+    var action: () -> Void
+
+    var body: some View {
+        if let countdown = store.goal.countdown {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let tint = oneGoalPlayerTint(musicManager.avgColor, enabled: playerColorTinting)
+                Button(action: action) {
+                    ZStack {
+                        Circle().stroke(tint.opacity(0.18), lineWidth: 1)
+                        Circle()
+                            .trim(from: 0, to: countdown.fractionRemaining(at: context.date))
+                            .stroke(tint, style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                    .frame(width: 20, height: 20)
+                    .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("\(countdown.statusText(at: context.date)). Edit One Goal")
+                .accessibilityLabel("Edit One Goal")
+                .accessibilityValue(countdown.statusText(at: context.date))
+            }
+            .transaction { $0.disablesAnimations = true }
+        }
+    }
+}
+
+/// Keep the same small visualizer and ring available in the expanded header.
+struct OneGoalRingVisualizer: View {
+    @ObservedObject private var store = OneGoalStore.shared
+    @ObservedObject private var musicManager = MusicManager.shared
+    @Default(.oneGoalTimerStyle) private var timerStyle
+    @Default(.coloredSpectrogram) private var coloredSpectrogram
+    var action: () -> Void
+
+    var body: some View {
+        if timerStyle == .visualizerRing && store.goal.countdown != nil {
+            ZStack(alignment: .center) {
+                Rectangle()
+                    .fill((coloredSpectrogram ? Color(nsColor: musicManager.avgColor) : .gray).gradient)
+                    .frame(width: 10, height: 10)
+                    .mask {
+                        AudioSpectrumView(isPlaying: $musicManager.isPlaying)
+                            .frame(width: 10, height: 10)
+                    }
+                OneGoalCountdownRing(action: action)
+            }
+            .frame(width: 20, height: 20)
+        }
     }
 }
 

@@ -35,6 +35,7 @@ class MusicManager: ObservableObject {
     @Published var isPlaying = false
     @Published var album: String = "Self Love"
     @Published var isPlayerIdle: Bool = true
+    @Published private(set) var hasCurrentTrack = false
     @Published var animations: BoringAnimations = .init()
     @Published var avgColor: NSColor = .white
     @Published var bundleIdentifier: String? = nil
@@ -74,6 +75,18 @@ class MusicManager: ObservableObject {
         NotificationCenter.default.publisher(for: Notification.Name.mediaControllerChanged)
             .sink { [weak self] _ in
                 self?.setActiveControllerBasedOnPreference()
+            }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didTerminateApplicationNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      let id = app.bundleIdentifier, id == self.bundleIdentifier else { return }
+                self.hasCurrentTrack = false
+                self.isPlaying = false
+                self.updateIdleState(state: false)
             }
             .store(in: &cancellables)
 
@@ -181,6 +194,8 @@ class MusicManager: ObservableObject {
     // MARK: - Update Methods
     @MainActor
     private func updateFromPlaybackState(_ state: PlaybackState) {
+        hasCurrentTrack = MediaVisibilityPolicy.hasCurrentTrack(title: state.title, lastUpdated: state.lastUpdated)
+
         // Check for playback state changes (playing/paused)
         if state.isPlaying != self.isPlaying {
             NSLog("Playback state changed: \(state.isPlaying ? "Playing" : "Paused")")
@@ -544,6 +559,7 @@ class MusicManager: ObservableObject {
             debounceIdleTask = Task { [weak self] in
                 guard let self = self else { return }
                 try? await Task.sleep(for: .seconds(Defaults[.waitInterval]))
+                guard !Task.isCancelled else { return }
                 withAnimation {
                     self.isPlayerIdle = !self.isPlaying
                 }

@@ -33,6 +33,9 @@ struct SettingsView: View {
                 NavigationLink(value: "Appearance") {
                     Label("Appearance", systemImage: "eye")
                 }
+                NavigationLink(value: "One Goal") {
+                    Label("One Goal", systemImage: "target")
+                }
                 NavigationLink(value: "Media") {
                     Label("Media", systemImage: "play.laptopcomputer")
                 }
@@ -75,6 +78,8 @@ struct SettingsView: View {
                     GeneralSettings()
                 case "Appearance":
                     Appearance()
+                case "One Goal":
+                    OneGoalAppearanceSettings()
                 case "Media":
                     Media()
                 case "Calendar":
@@ -593,6 +598,7 @@ struct HUD: View {
 
 struct Media: View {
     @Default(.waitInterval) var waitInterval
+    @Default(.keepMediaVisibleWhenPaused) private var keepMediaVisibleWhenPaused
     @Default(.mediaController) var mediaController
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @Default(.hideNotchOption) var hideNotchOption
@@ -644,6 +650,8 @@ struct Media: View {
                     "Show music live activity",
                     isOn: $coordinator.musicLiveActivityEnabled.animation()
                 )
+                Toggle("Keep visible while paused", isOn: $keepMediaVisibleWhenPaused)
+                    .help("Keep the current track, album art, and visualizer visible when playback is paused.")
                 Toggle("Show sneak peek on playback changes", isOn: $enableSneakPeek)
                 Picker("Sneak Peek Style", selection: $sneakPeekStyles) {
                     ForEach(SneakPeekStyle.allCases) { style in
@@ -660,6 +668,8 @@ struct Media: View {
                         }
                     }
                 }
+                .disabled(keepMediaVisibleWhenPaused)
+                .help("Used when Keep visible while paused is turned off.")
                 Picker(
                     selection: $hideNotchOption,
                     label:

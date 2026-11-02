@@ -1,0 +1,33 @@
+name: One Goal checks
+
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths:
+      - 'boringNotch/**'
+      - 'Tests/**'
+      - 'scripts/test-one-goal.sh'
+      - '.github/workflows/one-goal-tests.yml'
+  pull_request:
+    paths:
+      - 'boringNotch/**'
+      - 'Tests/**'
+      - 'scripts/test-one-goal.sh'
+      - '.github/workflows/one-goal-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: one-goal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  background-checks:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Model, layout, and offscreen renderer checks
+        run: scripts/test-one-goal.sh

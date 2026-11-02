@@ -7,10 +7,15 @@ final class OneGoalStore: ObservableObject {
     static let storageKey = "oneGoal.current"
 
     @Published private(set) var goal: OneGoal
+    var onCountdownFinished: (() -> Void)?
     private let defaults: UserDefaults
+    private let clock: () -> Date
+    private var completionTimer: Timer?
+    private var monitoringEnabled = false
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, clock: @escaping () -> Date = { Date() }) {
         self.defaults = defaults
+        self.clock = clock
         if let data = defaults.data(forKey: Self.storageKey),
            var saved = try? JSONDecoder().decode(OneGoal.self, from: data) {
             saved.text = OneGoal.normalized(saved.text)
@@ -18,7 +23,8 @@ final class OneGoalStore: ObservableObject {
                 saved = OneGoal()
                 defaults.removeObject(forKey: Self.storageKey)
             } else if let countdown = saved.countdown,
-                      !countdown.duration.isFinite || countdown.duration <= 0 || countdown.duration > 86_400 || !countdown.deadline.timeIntervalSince1970.isFinite {
+                      !countdown.duration.isFinite || countdown.duration <= 0 || countdown.duration > 86_400 || !countdown.deadline.timeIntervalSince1970.isFinite
+                        || countdown.pausedRemaining.map({ !$0.isFinite || $0 <= 0 || $0 > countdown.duration }) == true {
                 saved.countdown = nil
             }
             goal = saved
@@ -37,12 +43,102 @@ final class OneGoalStore: ObservableObject {
         update(updated)
     }
 
-    func startCountdown(minutes: Int, now: Date = Date()) {
-        guard !goal.text.isEmpty, (1...1440).contains(minutes) else { return }
+    func startCountdown(minutes: Int, now: Date? = nil) {
+        guard (1...1440).contains(minutes) else { return }
+        startCountdown(seconds: minutes * 60, now: now)
+    }
+
+    func startCountdown(seconds: Int, now: Date? = nil) {
+        guard !goal.text.isEmpty, (1...86_400).contains(seconds) else { return }
+        let now = now ?? clock()
         var updated = goal
-        let duration = TimeInterval(minutes * 60)
+        let duration = TimeInterval(seconds)
         updated.countdown = OneGoal.Countdown(duration: duration, deadline: now.addingTimeInterval(duration))
         update(updated)
+    }
+
+    func pauseCountdown(now: Date? = nil) {
+        guard var countdown = goal.countdown, !countdown.isPaused, !countdown.isFinished else { return }
+        let remaining = countdown.remaining(at: now ?? clock())
+        guard remaining > 0 else {
+            finishCountdown()
+            return
+        }
+        countdown.pausedRemaining = remaining
+        var updated = goal
+        updated.countdown = countdown
+        update(updated)
+    }
+
+    func resumeCountdown(now: Date? = nil) {
+        guard var countdown = goal.countdown, let remaining = countdown.pausedRemaining, remaining > 0 else { return }
+        countdown.deadline = (now ?? clock()).addingTimeInterval(remaining)
+        countdown.pausedRemaining = nil
+        var updated = goal
+        updated.countdown = countdown
+        update(updated)
+    }
+
+    func restartCountdown(now: Date? = nil) {
+        guard let countdown = goal.countdown, !goal.text.isEmpty else { return }
+        var updated = goal
+        updated.countdown = OneGoal.Countdown(duration: countdown.duration, deadline: (now ?? clock()).addingTimeInterval(countdown.duration))
+        update(updated)
+    }
+
+    /// One app-level monitor, independent of how many notch views are visible.
+    func startMonitoringCountdown() {
+        guard !monitoringEnabled else { return }
+        monitoringEnabled = true
+        // Do not chime on launch for a timer that expired while the app was off.
+        if var countdown = goal.countdown, !countdown.isPaused, !countdown.isFinished,
+           countdown.remaining(at: clock()) <= 0 {
+            countdown.completionHandled = true
+            var updated = goal
+            updated.countdown = countdown
+            update(updated)
+        } else {
+            scheduleCompletionMonitor()
+        }
+    }
+
+    private func scheduleCompletionMonitor() {
+        completionTimer?.invalidate()
+        completionTimer = nil
+        guard monitoringEnabled, let countdown = goal.countdown,
+              !countdown.isPaused, !countdown.isFinished else { return }
+        if countdown.remaining(at: clock()) <= 0 {
+            finishCountdown()
+            return
+        }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshCountdown()
+            }
+        }
+        completionTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    func refreshCountdown() {
+        guard monitoringEnabled, let countdown = goal.countdown,
+              !countdown.isPaused, !countdown.isFinished else { return }
+        if countdown.remaining(at: clock()) <= 0 { finishCountdown() }
+    }
+
+    private func finishCountdown() {
+        guard var countdown = goal.countdown, !countdown.isFinished else { return }
+        countdown.pausedRemaining = nil
+        countdown.completionHandled = true
+        var updated = goal
+        updated.countdown = countdown
+        // Persist the handled flag before playing, including across relaunches.
+        update(updated)
+        onCountdownFinished?()
+    }
+
+    deinit {
+        completionTimer?.invalidate()
     }
 
     func clearCountdown() {
@@ -63,5 +159,6 @@ final class OneGoalStore: ObservableObject {
             defaults.set(data, forKey: Self.storageKey)
         }
         goal = updated
+        scheduleCompletionMonitor()
     }
 }
