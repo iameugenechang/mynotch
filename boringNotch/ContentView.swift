@@ -28,6 +28,7 @@ struct ContentView: View {
     @State private var isHovering: Bool = false
     @State private var isHoveringGoalControl = false
     @State private var isPointerInsideNotch = false
+    @State private var notchBodySize = CGSize.zero
     @State private var anyDropDebounceTask: Task<Void, Never>?
 
     @State private var gestureProgress: CGFloat = .zero
@@ -196,24 +197,35 @@ struct ContentView: View {
                         }
                     }
                     .sensoryFeedback(.alignment, trigger: haptics)
-                    .contextMenu {
-                        Button("Settings") {
-                            DispatchQueue.main.async {
-                                SettingsWindowController.shared.showWindow()
-                            }
-                        }
-                        .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
-                        //                    Button("Edit") { // Doesnt work....
-                        //                        let dn = DynamicNotch(content: EditPanelView())
-                        //                        dn.toggle()
-                        //                    }
-                        //                    .keyboardShortcut("E", modifiers: .command)
-                    }
+                    .contextMenu { notchContextMenu }
                     .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("notch-body")
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { notchBodySize = $0 }
                 if vm.chinHeight > 0 {
                     Rectangle()
                         .fill(Color.black.opacity(0.01))
                         .frame(width: computedChinWidth, height: vm.chinHeight)
+                }
+            }
+
+            // These are separate overlays, not rows or padding inside the black
+            // notch shape. Neither the text nor the ring changes its dimensions.
+            if !coordinator.helloAnimationRunning {
+                if vm.notchState == .closed && notchBodySize.width > 0 {
+                    OneGoalCountdownButton(action: openGoalEditor)
+                        .background(.black, in: Circle())
+                        .onHover(perform: handleGoalHover)
+                        .contextMenu { notchContextMenu }
+                        .offset(
+                            x: -notchBodySize.width / 2 - 14,
+                            y: max(0, (vm.effectiveClosedNotchHeight - 24) / 2)
+                        )
+                }
+                if !goalStore.goal.text.isEmpty {
+                    OneGoalLabel(maxWidth: vm.closedNotchSize.width - 20, action: openGoalEditor)
+                        .onHover(perform: handleGoalHover)
+                        .contextMenu { notchContextMenu }
+                        .offset(y: max(goalHeaderHeight, notchBodySize.height) + 2)
                 }
             }
         }
@@ -316,23 +328,8 @@ struct ContentView: View {
                             Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
                         }
                     }
-                    .frame(minHeight: goalHeaderHeight)
-                    // Symmetric gutters keep the camera spacer centered. The ring
-                    // uses the left gutter, ahead of the existing album artwork.
-                    .padding(.horizontal, vm.notchState == .closed ? 32 : 0)
-                    .overlay(alignment: .leading) {
-                        if vm.notchState == .closed {
-                            OneGoalCountdownButton(action: openGoalEditor)
-                                .onHover(perform: handleGoalHover)
-                        }
-                    }
+                    .frame(minHeight: vm.notchState == .open ? goalHeaderHeight : nil)
                     .accessibilityElement(children: .contain)
-
-                    if !goalStore.goal.text.isEmpty {
-                        OneGoalLabel(width: vm.closedNotchSize.width - 20, action: openGoalEditor)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .onHover(perform: handleGoalHover)
-                    }
 
                       if coordinator.sneakPeek.show {
                           if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && !Defaults[.inlineHUD] && vm.notchState == .closed {
@@ -479,7 +476,7 @@ struct ContentView: View {
                     width: (coordinator.expandingView.show
                         && coordinator.expandingView.type == .music
                         && Defaults[.sneakPeekStyles] == .inline)
-                        ? min(380, windowSize.width - 2 * max(0, vm.effectiveClosedNotchHeight - 12) - 16 - 64 - 2 * cornerRadiusInsets.closed.bottom)
+                        ? min(380, windowSize.width - 2 * max(0, vm.effectiveClosedNotchHeight - 12) - 16 - 2 * cornerRadiusInsets.closed.bottom)
                         : vm.closedNotchSize.width
                             + -cornerRadiusInsets.closed.top
                 )
@@ -538,6 +535,21 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var notchContextMenu: some View {
+        Button("Settings") {
+            DispatchQueue.main.async {
+                SettingsWindowController.shared.showWindow()
+            }
+        }
+        .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
+        Divider()
+        Button("Quit mynotch") {
+            NSApplication.shared.terminate(nil)
+        }
+        .keyboardShortcut("q", modifiers: .command)
+    }
+
     private func openGoalEditor() {
         hoverTask?.cancel()
         vm.openGoalEditor()
@@ -547,8 +559,8 @@ struct ContentView: View {
         isHoveringGoalControl = hovering
         if hovering {
             hoverTask?.cancel()
-        } else if isPointerInsideNotch {
-            handleHover(true)
+        } else {
+            handleHover(isPointerInsideNotch)
         }
     }
 

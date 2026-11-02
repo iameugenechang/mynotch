@@ -2,11 +2,12 @@
 
 A personal fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) with one persistent definition of done.
 
-- The active goal sits below the notch in 8pt text. Nothing is shown there when empty.
+- The active goal sits below the notch in a text-sized 8pt label without enlarging the notch. Nothing is shown there when empty.
 - A small countdown ring sits to the left of the music player, including when music is idle.
 - Click the ring or goal text to open the One Goal tab beside Shelf.
 - A countdown is optional. Expiry is silent and does not complete the goal.
 - Complete clears the goal and countdown, including their saved state. No history is kept.
+- Right-click the notch to open Settings or quit mynotch.
 
 The app builds as `mynotch.app` with separate preferences from boring.notch. Upstream auto-updates are disabled so they cannot replace this fork. Existing music, Shelf, calendar, camera, and HUD features remain available.
 

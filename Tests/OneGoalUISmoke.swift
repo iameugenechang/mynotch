@@ -3,7 +3,7 @@ import ApplicationServices
 
 // Optional native smoke test: xcrun swift Tests/OneGoalUISmoke.swift /path/to/mynotch.app
 // Requires Accessibility access. Refuses to overwrite an existing saved goal.
-let appID = "com.iameugenechang.mynotch"
+let appID = ProcessInfo.processInfo.environment["MYNOTCH_UI_BUNDLE_ID"] ?? "com.iameugenechang.mynotch"
 let storageKey = "oneGoal.current"
 let appPath = CommandLine.arguments.dropFirst().first ?? "/tmp/mynotch-build/Build/Products/Debug/mynotch.app"
 let goalText = "Send the proposal to Maya"
@@ -47,6 +47,17 @@ func find(_ role: String, _ label: String) -> AXUIElement? {
         text($0, kAXRoleAttribute) == role &&
         (text($0, kAXDescriptionAttribute) == label || text($0, kAXTitleAttribute) == label)
     }
+}
+func identified(_ identifier: String) -> AXUIElement? {
+    elements().first { text($0, kAXIdentifierAttribute) == identifier }
+}
+func contextMenuItems() -> [AXUIElement] {
+    guard let app = runningApp() else { return [] }
+    let root = AXUIElementCreateApplication(app.processIdentifier)
+    let children = attribute(root, kAXChildrenAttribute) as? [AXUIElement] ?? []
+    return children.filter { text($0, kAXRoleAttribute) != kAXMenuBarRole }
+        .flatMap { [$0] + descendants($0) }
+        .filter { text($0, kAXRoleAttribute) == kAXMenuItemRole }
 }
 func press(_ label: String) {
     waitUntil("button \(label)") { find(kAXButtonRole, label) != nil }
@@ -99,6 +110,7 @@ func launch() {
     process.waitUntilExit()
     expect(process.terminationStatus == 0, "launch app")
     waitUntil("collapsed ring") { find(kAXButtonRole, "Edit One Goal") != nil }
+    Thread.sleep(forTimeInterval: 2) // Let startup media/battery activity settle.
 }
 func restart() {
     runningApp()!.terminate()
@@ -119,12 +131,15 @@ waitUntil("normal hover expansion") { find(kAXButtonRole, "Home") != nil }
 expect(true, "moving from ring to notch preserves hover expansion")
 movePointer(to: CGPoint(x: 40, y: 400))
 waitUntil("hover collapse") { find(kAXButtonRole, "Home") == nil }
+waitUntil("notch body geometry") { identified("notch-body") != nil }
+let emptyBodySize = frame(identified("notch-body")!).size
 
 press("Edit One Goal")
 waitUntil("goal field") { find(kAXTextFieldRole, "Goal") != nil }
 expect(find(kAXButtonRole, "One Goal") != nil, "One Goal tab exists")
 expect(find(kAXButtonRole, "Shelf") != nil, "Shelf tab remains available")
 expect(frame(find(kAXButtonRole, "Home")!).minY < 10, "editor stays anchored to screen top")
+expect(frame(identified("notch-body")!).height <= 190, "expanded notch keeps its original height")
 
 // Move outside the notch, then use real keyboard events rather than setting a binding.
 CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: 40, y: 400), mouseButton: .left)?.post(tap: .cghidEventTap)
@@ -143,6 +158,11 @@ sendKey(36) // Return
 waitUntil("saved label") { find(kAXButtonRole, "Edit goal: \(goalText)") != nil && find(kAXTextFieldRole, "Goal") == nil }
 waitUntil("persisted goal") { savedGoal() != nil }
 expect(true, "Return saves and collapses")
+waitUntil("unchanged collapsed body") { frame(identified("notch-body")!).size == emptyBodySize }
+expect(true, "saving a goal does not change notch body size")
+let shortLabelFrame = frame(find(kAXButtonRole, "Edit goal: \(goalText)")!)
+expect(shortLabelFrame.width < emptyBodySize.width, "short goal label hugs its text")
+expect(shortLabelFrame.minY >= frame(identified("notch-body")!).maxY, "goal label sits outside the notch body")
 
 press("Edit goal: \(goalText)")
 waitUntil("saved text restored") { find(kAXTextFieldRole, "Goal").map { text($0, kAXValueAttribute) == goalText } ?? false }
@@ -183,6 +203,8 @@ press("Save")
 let label = find(kAXButtonRole, "Edit goal: \(longGoal)")!
 let labelFrame = frame(label)
 expect(labelFrame.width <= 220, "long goal stays bounded to notch width")
+expect(labelFrame.width > shortLabelFrame.width, "label width follows text length")
+expect(frame(identified("notch-body")!).size == emptyBodySize, "long goal does not enlarge notch body")
 expect(labelFrame.height <= 20, "goal keeps a small click target below notch")
 expect(labelFrame.minY >= screen.safeAreaInsets.top, "goal stays below camera")
 expect(abs(labelFrame.midX - screen.frame.midX) < 1, "goal is centered below notch")
@@ -198,4 +220,18 @@ press("Edit One Goal")
 press("Complete")
 waitUntil("smoke state cleared") { savedGoal() == nil }
 expect(true, "smoke test leaves no saved goal")
+
+let body = frame(identified("notch-body")!)
+let click = CGPoint(x: body.midX, y: min(16, body.midY))
+for eventType in [CGEventType.rightMouseDown, .rightMouseUp] {
+    CGEvent(mouseEventSource: nil, mouseType: eventType, mouseCursorPosition: click, mouseButton: .right)?.post(tap: .cghidEventTap)
+}
+waitUntil("notch quit context menu") {
+    contextMenuItems().contains { text($0, kAXTitleAttribute) == "Quit mynotch" }
+}
+expect(contextMenuItems().contains { text($0, kAXTitleAttribute) == "Settings" }, "right-click menu retains Settings")
+let quit = contextMenuItems().first { text($0, kAXTitleAttribute) == "Quit mynotch" }!
+expect(AXUIElementPerformAction(quit, kAXPressAction as CFString) == .success, "right-click menu offers Quit mynotch")
+waitUntil("quit from notch menu") { runningApp() == nil }
+expect(true, "Quit from notch menu terminates app")
 print("One Goal native smoke: \(checks) checks passed")

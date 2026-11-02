@@ -38,7 +38,7 @@ struct OneGoalCountdownButton: View {
 
 struct OneGoalLabel: View {
     @ObservedObject private var store = OneGoalStore.shared
-    let width: CGFloat
+    let maxWidth: CGFloat
     var action: () -> Void
 
     var body: some View {
@@ -49,12 +49,17 @@ struct OneGoalLabel: View {
                     .foregroundStyle(.white.opacity(0.8))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(width: max(0, width), height: 18)
+                    .padding(.horizontal, 6)
+                    .frame(maxWidth: max(0, maxWidth))
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(height: goalLabelHeight)
+                    .background(.black, in: RoundedRectangle(cornerRadius: 4))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(store.goal.text)
             .accessibilityLabel("Edit goal: \(store.goal.text)")
+            .accessibilityIdentifier("one-goal-label")
         }
     }
 }
