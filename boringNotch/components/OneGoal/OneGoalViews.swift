@@ -32,16 +32,6 @@ struct OneGoalLabel: View {
                 .frame(maxWidth: max(0, maxWidth))
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(height: goalLabelHeight)
-                .background {
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: 0,
-                        bottomLeadingRadius: 2,
-                        bottomTrailingRadius: 2,
-                        topTrailingRadius: 0
-                    )
-                    .fill(.black)
-                    .padding(.top, -1) // Cover subpixel seams at the shared edge.
-                }
                 .overlay(alignment: .bottom) {
                     if let fraction {
                         GeometryReader { geometry in
@@ -54,8 +44,8 @@ struct OneGoalLabel: View {
                         .accessibilityHidden(true)
                     }
                 }
-                // Keep an 18pt click target without adding visible backing.
-                .padding(.bottom, 6)
+                // Expand the hit target upward, not below the menu bar.
+                .padding(.top, goalCaptionHitPadding)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

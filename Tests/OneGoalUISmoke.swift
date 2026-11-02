@@ -146,6 +146,9 @@ if runningApp() == nil { launch() }
 expect(find(kAXButtonRole, "Edit One Goal") == nil, "standalone countdown ring is removed")
 expect(identified("one-goal-label") == nil, "empty state has no caption or timer")
 let screen = NSScreen.screens.first!
+let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY > 0
+    ? screen.frame.maxY - screen.visibleFrame.maxY
+    : max(NSStatusBar.system.thickness, screen.safeAreaInsets.top)
 movePointer(to: CGPoint(x: screen.frame.midX, y: 20))
 waitUntil("normal hover expansion") { find(kAXButtonRole, "Home") != nil }
 expect(true, "normal notch hover still expands")
@@ -154,6 +157,7 @@ waitUntil("hover collapse") { find(kAXButtonRole, "Home") == nil }
 waitUntil("notch body geometry") { identified("notch-body") != nil }
 let emptyBodyFrame = frame(identified("notch-body")!)
 let emptyBodySize = emptyBodyFrame.size
+expect(emptyBodyFrame.maxY <= menuBarHeight + 0.5, "collapsed notch stays inside menu-bar height")
 
 openGoal()
 waitUntil("goal field") { find(kAXTextFieldRole, "Goal") != nil }
@@ -183,7 +187,8 @@ waitUntil("unchanged collapsed body") { frame(identified("notch-body")!).size ==
 expect(true, "saving a goal does not change notch body size")
 let shortLabelFrame = frame(find(kAXButtonRole, "Edit goal: \(goalText)")!)
 expect(shortLabelFrame.width < emptyBodySize.width, "short goal label hugs its text")
-expect(abs(shortLabelFrame.minY - frame(identified("notch-body")!).maxY) < 0.5, "goal tab joins the notch with no gap")
+expect(abs(shortLabelFrame.maxY - menuBarHeight) < 0.5, "goal is pinned to the menu-bar bottom edge")
+expect(shortLabelFrame.minY >= 0, "goal hit target stays inside the menu bar")
 expect(shortLabelFrame.height <= 18, "caption keeps a small invisible click target")
 expect(text(identified("one-goal-label")!, kAXValueAttribute) == "No countdown", "unset countdown adds no timer indicator")
 movePointer(to: CGPoint(x: shortLabelFrame.midX, y: shortLabelFrame.minY + 5))
@@ -192,7 +197,7 @@ movePointer(to: CGPoint(x: 40, y: 400))
 
 press("Edit goal: \(goalText)")
 waitUntil("saved text restored") { find(kAXTextFieldRole, "Goal").map { text($0, kAXValueAttribute) == goalText } ?? false }
-expect(abs(frame(find(kAXButtonRole, "Edit goal: \(goalText)")!).minY - frame(identified("notch-body")!).maxY) < 0.5, "goal tab stays attached when expanded")
+expect(abs(frame(find(kAXButtonRole, "Edit goal: \(goalText)")!).maxY - menuBarHeight) < 0.5, "expanded goal also stays inside menu-bar height")
 let minutesField = find(kAXTextFieldRole, "Countdown minutes")!
 expect(AXUIElementSetAttributeValue(minutesField, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success, "focus countdown duration")
 sendKey(0, flags: .maskCommand) // Select all
@@ -237,10 +242,10 @@ let labelFrame = frame(label)
 expect(labelFrame.width <= 220, "long goal stays bounded to notch width")
 expect(labelFrame.width > shortLabelFrame.width, "label width follows text length")
 expect(frame(identified("notch-body")!).size == emptyBodySize, "long goal does not enlarge notch body")
-expect(labelFrame.height <= 20, "goal keeps a small click target below notch")
-expect(abs(labelFrame.minY - frame(identified("notch-body")!).maxY) < 0.5, "long goal tab has no gap below notch")
-expect(labelFrame.minY >= screen.safeAreaInsets.top, "goal stays below camera")
-expect(abs(labelFrame.midX - screen.frame.midX) < 1, "goal is centered below notch")
+expect(labelFrame.height <= 18, "goal keeps a small click target inside notch")
+expect(abs(labelFrame.maxY - menuBarHeight) < 0.5, "long goal stays at the menu-bar bottom edge")
+expect(labelFrame.minY >= 0 && labelFrame.maxY <= menuBarHeight + 0.5, "goal never protrudes below menu bar")
+expect(abs(labelFrame.midX - screen.frame.midX) < 1, "goal is centered inside notch")
 press("Edit goal: \(longGoal)")
 expect(text(find(kAXTextFieldRole, "Goal")!, kAXValueAttribute) == longGoal, "truncation does not lose saved text")
 sendKey(0, flags: .maskCommand)

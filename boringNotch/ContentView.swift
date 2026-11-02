@@ -28,7 +28,6 @@ struct ContentView: View {
     @State private var isHovering: Bool = false
     @State private var isHoveringGoalControl = false
     @State private var isPointerInsideNotch = false
-    @State private var notchBodySize = CGSize.zero
     @State private var anyDropDebounceTask: Task<Void, Never>?
 
     @State private var gestureProgress: CGFloat = .zero
@@ -62,33 +61,21 @@ struct ContentView: View {
         )
     }
 
-    // Keep the attached goal below the physical camera, including with custom
-    // heights or fullscreen hiding enabled for other activities.
+    // Expanded controls still respect the display's camera reservation.
     private var goalHeaderHeight: CGFloat {
         let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) }
         return max(24, vm.effectiveClosedNotchHeight, screen?.safeAreaInsets.top ?? 0)
     }
 
-    private var computedChinWidth: CGFloat {
-        var chinWidth: CGFloat = vm.closedNotchSize.width
-
-        if coordinator.expandingView.type == .battery && coordinator.expandingView.show
-            && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
-        {
-            chinWidth = 640
-        } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
-            && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
-            && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
-        {
-            chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
-        } else if !coordinator.expandingView.show && vm.notchState == .closed
-            && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace]
-            && !vm.hideOnClosed
-        {
-            chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
-        }
-
-        return chinWidth
+    // Pin the goal to the bottom of the menu bar, deliberately ignoring the
+    // camera safe area for text placement so this compact layout can be tried.
+    private var goalMenuBarHeight: CGFloat {
+        let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
+        guard let screen else { return NSStatusBar.system.thickness }
+        let visibleInset = screen.frame.maxY - screen.visibleFrame.maxY
+        if visibleInset > 0 { return visibleInset }
+        // The menu bar can be hidden in fullscreen; keep a stable compact band.
+        return max(NSStatusBar.system.thickness, screen.safeAreaInsets.top)
     }
 
     var body: some View {
@@ -195,20 +182,14 @@ struct ContentView: View {
                     .contextMenu { notchContextMenu }
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("notch-body")
-                    .onGeometryChange(for: CGSize.self) { $0.size } action: { notchBodySize = $0 }
-                if vm.chinHeight > 0 {
-                    Rectangle()
-                        .fill(Color.black.opacity(0.01))
-                        .frame(width: computedChinWidth, height: vm.chinHeight)
-                }
             }
 
-            // A text-sized lower tab joins the body without changing its width.
+            // The caption and underline stay entirely inside the menu bar.
             if !coordinator.helloAnimationRunning && !goalStore.goal.text.isEmpty {
                 OneGoalLabel(maxWidth: vm.closedNotchSize.width - 20, action: openGoalEditor)
                     .onHover(perform: handleGoalHover)
                     .contextMenu { notchContextMenu }
-                    .offset(y: notchBodySize.height)
+                    .offset(y: max(0, goalMenuBarHeight - goalLabelHeight - goalCaptionHitPadding))
             }
         }
         .padding(.bottom, 8)
@@ -310,7 +291,9 @@ struct ContentView: View {
                             Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
                         }
                     }
-                    .frame(minHeight: goalHeaderHeight)
+                    .frame(height: vm.notchState == .closed ? goalMenuBarHeight : nil)
+                    .frame(minHeight: vm.notchState == .open ? goalHeaderHeight : nil)
+                    .clipped()
                     .accessibilityElement(children: .contain)
 
                       if coordinator.sneakPeek.show {

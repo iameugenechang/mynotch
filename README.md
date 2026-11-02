@@ -2,7 +2,7 @@
 
 A personal fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) with one persistent definition of done.
 
-- The active goal sits in a shallow 12pt caption lip with 8pt text, attached directly to the notch without widening its body. Nothing is shown there when empty.
+- The active goal is centered in 8pt text at the bottom of the menu bar, inside the notch's existing height. There is no lower lip or extra height. This experimental placement needs a physical-display readability check. Nothing is shown there when empty.
 - An optional countdown appears as a thin underline beneath the goal. There is no separate timer icon or extra notch shoulder.
 - Click the caption to edit. With no goal, open One Goal beside Shelf or from the notch's right-click menu.
 - A countdown is optional. Expiry is silent and does not complete the goal.
