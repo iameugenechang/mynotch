@@ -51,7 +51,7 @@ struct OneGoalRendererTests {
             expect((sound?.duration ?? 0) > 0, "\(choice.rawValue) is a valid sound file")
         }
         expect(!NSApp.isActive && NSApp.windows.isEmpty, "renderer test never activates or creates windows")
-        print("One Goal renderer: \(checks) checks passed (no audio played)")
+        print("Working on renderer: \(checks) checks passed (no audio played)")
     }
 
     private static func near(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) < 0.001 }

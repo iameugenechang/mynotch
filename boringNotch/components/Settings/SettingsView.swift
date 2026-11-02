@@ -33,8 +33,8 @@ struct SettingsView: View {
                 NavigationLink(value: "Appearance") {
                     Label("Appearance", systemImage: "eye")
                 }
-                NavigationLink(value: "One Goal") {
-                    Label("One Goal", systemImage: "target")
+                NavigationLink(value: "Working on") {
+                    Label("Working on", systemImage: "pencil.line")
                 }
                 NavigationLink(value: "Media") {
                     Label("Media", systemImage: "play.laptopcomputer")
@@ -78,7 +78,7 @@ struct SettingsView: View {
                     GeneralSettings()
                 case "Appearance":
                     Appearance()
-                case "One Goal":
+                case "Working on":
                     OneGoalAppearanceSettings()
                 case "Media":
                     Media()

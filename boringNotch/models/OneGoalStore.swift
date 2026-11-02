@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class OneGoalStore: ObservableObject {
     static let shared = OneGoalStore()
+    // Keep the existing key when renaming the feature to "Working on".
     static let storageKey = "oneGoal.current"
 
     @Published private(set) var goal: OneGoal

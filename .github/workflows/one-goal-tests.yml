@@ -1,4 +1,4 @@
-name: One Goal checks
+name: Working on checks
 
 on:
   push:

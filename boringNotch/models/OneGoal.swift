@@ -1,6 +1,7 @@
 import Foundation
 
-/// Only the current definition of done and its optional countdown. No history.
+/// What you're currently working on and its optional countdown. No history.
+/// Keep the legacy type name and Codable schema compatible with saved snapshots.
 struct OneGoal: Codable, Equatable {
     var text: String = ""
     var countdown: Countdown?

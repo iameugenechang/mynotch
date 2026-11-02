@@ -69,9 +69,10 @@ struct OneGoalLabel: View {
         }
         .buttonStyle(.plain)
         .help(remaining.map { "\(store.goal.text) (\($0))" } ?? store.goal.text)
-        .accessibilityLabel("Edit goal: \(store.goal.text)")
+        .accessibilityLabel("Working on: \(store.goal.text)")
+        .accessibilityHint("Edit what you're working on.")
         .accessibilityValue(remaining ?? "No countdown")
-        .accessibilityIdentifier("one-goal-label")
+        .accessibilityIdentifier("working-on-label")
         .transaction { $0.disablesAnimations = true }
     }
 }
@@ -112,7 +113,7 @@ struct OneGoalAppearanceSettings: View {
             } header: {
                 Text("Layout")
             } footer: {
-                Text("Height follows the text size automatically. Padding adds space above and below the text. Positive offset moves the collapsed goal down; expansion keeps it at the bottom.")
+                Text("Height follows the text size automatically. Padding adds space above and below the text. Positive offset moves the collapsed caption down; expansion keeps it at the bottom.")
             }
 
             Section {
@@ -131,7 +132,7 @@ struct OneGoalAppearanceSettings: View {
             } header: {
                 Text("Countdown")
             } footer: {
-                Text("Text and timer both follow Player tinting in Appearance. The ring surrounds the music visualizer when visible; the goal tooltip always shows the exact remaining time.")
+                Text("Text and timer both follow Player tinting in Appearance. The ring surrounds the music visualizer when visible; the caption tooltip always shows the exact remaining time.")
             }
 
             Section {
@@ -154,7 +155,7 @@ struct OneGoalAppearanceSettings: View {
             } header: {
                 Text("Timer finished")
             } footer: {
-                Text("Plays once when the countdown reaches zero. The goal stays active until you complete it. Choose Silent for no sound.")
+                Text("Plays once when the countdown reaches zero. Your text stays visible until you choose Done. Choose Silent for no sound.")
             }
 
             Section {
@@ -167,7 +168,7 @@ struct OneGoalAppearanceSettings: View {
                 }
             }
         }
-        .navigationTitle("One Goal")
+        .navigationTitle("Working on")
     }
 }
 
@@ -223,20 +224,20 @@ struct OneGoalView: View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Your goal", systemImage: "pencil")
+                    Label("What are you working on?", systemImage: "pencil")
                         .font(.system(size: 11, weight: .medium))
                     Spacer()
                 }
                 .foregroundStyle(.secondary)
 
-                TextField("e.g. Send the proposal to Maya", text: $draft)
+                TextField("e.g. The proposal for Maya", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16, weight: .medium, design: .rounded))
                     .tint(tint)
                     .focused($focusedField, equals: .goal)
                     .onSubmit(save)
-                    .accessibilityLabel("Goal")
-                    .accessibilityHint("Enter one clear outcome. Press Return to save.")
+                    .accessibilityLabel("What are you working on?")
+                    .accessibilityHint("Describe what you're working on. Press Return to save.")
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -256,13 +257,14 @@ struct OneGoalView: View {
                         store.complete()
                         dismiss()
                     } label: {
-                        Label("Complete", systemImage: "checkmark.circle")
+                        Label("Done", systemImage: "checkmark.circle")
                             .font(.system(size: 11, weight: .medium))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
                             .background(.white.opacity(0.06), in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .help("Clear the saved text and countdown.")
                     .disabled(store.goal.text.isEmpty && OneGoal.normalized(draft).isEmpty)
 
                     Spacer(minLength: 0)
@@ -525,8 +527,8 @@ struct OneGoalCountdownRing: View {
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .help("\(countdown.statusText(at: context.date)). Edit One Goal")
-                .accessibilityLabel("Edit One Goal")
+                .help("\(countdown.statusText(at: context.date)). Edit what you're working on.")
+                .accessibilityLabel("Edit what you're working on")
                 .accessibilityValue(countdown.statusText(at: context.date))
             }
             .transaction { $0.disablesAnimations = true }

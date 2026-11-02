@@ -13,6 +13,7 @@ struct OneGoalTests {
     @MainActor
     static func main() throws {
         try persistenceAndValidation()
+        try renamedFeatureKeepsSavedState()
         durationParsing()
         pauseResumeAndRestart()
         completionDelivery()
@@ -20,7 +21,7 @@ struct OneGoalTests {
         try legacySnapshots()
         layoutRules()
         pausedMediaVisibility()
-        print("One Goal: \(checks) checks passed")
+        print("Working on: \(checks) checks passed")
     }
 
     @MainActor
@@ -106,6 +107,36 @@ struct OneGoalTests {
             let orphan = OneGoal(text: "  ", countdown: .init(duration: 60, deadline: clock.now))
             defaults.set(try JSONEncoder().encode(orphan), forKey: OneGoalStore.storageKey)
             expect(OneGoalStore(defaults: defaults).goal == OneGoal(), "orphan countdown is discarded")
+        }
+    }
+
+    @MainActor
+    private static func renamedFeatureKeepsSavedState() throws {
+        try withStore { defaults, clock, _ in
+            // Use the literal old key/schema rather than the current constant.
+            let legacy: [String: Any] = [
+                "text": "The proposal for Maya",
+                "countdown": ["duration": 450,
+                              "deadline": clock.now.addingTimeInterval(300).timeIntervalSinceReferenceDate,
+                              "pausedRemaining": 120.5, "completionHandled": false]
+            ]
+            let data = try JSONSerialization.data(withJSONObject: legacy)
+            defaults.set(data, forKey: "oneGoal.current")
+            defaults.set(11.0, forKey: "oneGoalFontSize")
+            let restored = OneGoalStore(defaults: defaults, clock: { clock.now })
+            expect(OneGoalStore.storageKey == "oneGoal.current", "Working on retains the original storage key")
+            expect(restored.goal.text == "The proposal for Maya", "rename preserves existing text")
+            expect(restored.goal.countdown?.duration == 450, "rename preserves existing timer duration")
+            expect(restored.goal.countdown?.pausedRemaining == 120.5, "rename preserves paused remainder")
+            expect(defaults.data(forKey: "oneGoal.current") == data, "loading after rename leaves the saved snapshot unchanged")
+            let previousCountdown = restored.goal.countdown
+            restored.save(text: "The revised proposal for Maya")
+            let reopened = OneGoalStore(defaults: defaults, clock: { clock.now })
+            expect(reopened.goal.text == "The revised proposal for Maya", "renamed editor continues saving to the original key")
+            expect(reopened.goal.countdown == previousCountdown, "editing after rename retains the full countdown state")
+            reopened.complete()
+            expect(defaults.object(forKey: "oneGoal.current") == nil, "Done removes the original snapshot")
+            expect(defaults.double(forKey: "oneGoalFontSize") == 11, "Done retains existing appearance preferences")
         }
     }
 

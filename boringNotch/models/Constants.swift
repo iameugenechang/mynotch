@@ -87,7 +87,7 @@ func oneGoalCaptionHeight(fontSize: CGFloat, padding: CGFloat) -> CGFloat {
 }
 
 extension Defaults.Keys {
-    // MARK: One Goal
+    // MARK: Working on (keep existing preference keys)
     static let oneGoalFontSize = Key<CGFloat>("oneGoalFontSize", default: 7)
     static let oneGoalTextPadding = Key<CGFloat>("oneGoalTextPadding", default: 1)
     static let oneGoalTimerStyle = Key<OneGoalTimerStyle>("oneGoalTimerStyle", default: .underline)

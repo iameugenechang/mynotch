@@ -592,7 +592,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var notchContextMenu: some View {
-        Button("One Goal", action: openGoalEditor)
+        Button("Working on", action: openGoalEditor)
         if let countdown = goalStore.goal.countdown {
             if !countdown.isFinished {
                 Button(countdown.isPaused ? "Resume timer" : "Pause timer") {

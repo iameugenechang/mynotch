@@ -1,14 +1,14 @@
 # mynotch
 
-A personal fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) with one persistent definition of done.
+A personal fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) that keeps what you're working on in the notch.
 
-- One goal shares the notch's width and outer curves, including media extensions. Nothing extra is shown when empty.
-- Adjust the caption's font, padding, and vertical offset in Settings > One Goal. The default font is 7pt.
+- The Working on caption shares the notch's width and outer curves, including media extensions. Nothing extra is shown when empty.
+- Adjust the caption's font, padding, and vertical offset in Settings > Working on. The default font is 7pt.
 - Choose a countdown underline or a fixed-size ring around the visualizer. Both use the existing Player tinting setting.
-- Click the caption to edit. With no goal, open One Goal beside Shelf or from the notch's right-click menu.
+- Click the caption to edit. With nothing saved, open Working on beside Shelf or from the notch's right-click menu.
 - Use 15/25/50-minute presets or a custom duration from one second to 24 hours. Pause, resume, restart, or clear the timer.
-- Choose a completion sound and volume, or Silent. Expiry never completes the goal.
-- Complete clears the goal and countdown, including their saved state. No history is kept.
+- Choose a completion sound and volume, or Silent. Expiry never marks your work done.
+- Done clears the text and countdown, including their saved state. No history is kept.
 - Right-click the notch to open Settings or quit mynotch.
 
 The app builds as `mynotch.app` with separate preferences from boring.notch. Upstream auto-updates are disabled so they cannot replace this fork. Existing music, Shelf, calendar, camera, and HUD features remain available.
@@ -22,7 +22,7 @@ xcodebuild -project boringNotch.xcodeproj -scheme boringNotch \
 open /tmp/mynotch-build/Build/Products/Debug/mynotch.app
 ```
 
-Run `scripts/test-one-goal.sh` for background model, layout, and offscreen renderer checks. They use isolated preferences, do not launch mynotch, and never send input, change app focus, or play sounds. See [One Goal implementation and manual checks](docs/one-goal.md).
+Run `scripts/test-one-goal.sh` for background model, layout, and offscreen renderer checks. They use isolated preferences, do not launch mynotch, and never send input, change app focus, or play sounds. See [Working on implementation and manual checks](docs/one-goal.md).
 
 The upstream README and attribution follow.
 
