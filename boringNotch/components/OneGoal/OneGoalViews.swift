@@ -1,41 +1,5 @@
 import SwiftUI
 
-struct OneGoalCountdownButton: View {
-    @ObservedObject private var store = OneGoalStore.shared
-    var action: () -> Void
-
-    var body: some View {
-        if let countdown = store.goal.countdown {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                ring(fraction: countdown.fractionRemaining(at: context.date))
-                    .help("\(countdown.remainingText(at: context.date)) remaining. Edit One Goal")
-                    .accessibilityValue("\(countdown.remainingText(at: context.date)) remaining")
-            }
-        } else {
-            ring(fraction: 0)
-                .help("Edit One Goal")
-        }
-    }
-
-    private func ring(fraction: Double) -> some View {
-        Button(action: action) {
-            ZStack {
-                Circle().stroke(.white.opacity(0.22), lineWidth: 1.5)
-                Circle()
-                    .trim(from: 0, to: fraction)
-                    .stroke(.white.opacity(0.85), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
-            .frame(width: 12, height: 12)
-            .frame(width: 24, height: 24)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Edit One Goal")
-        .transaction { $0.disablesAnimations = true }
-    }
-}
-
 struct OneGoalLabel: View {
     @ObservedObject private var store = OneGoalStore.shared
     let maxWidth: CGFloat
@@ -43,33 +7,63 @@ struct OneGoalLabel: View {
 
     var body: some View {
         if !store.goal.text.isEmpty {
-            Button(action: action) {
-                Text(store.goal.text)
-                    .font(.system(size: 8))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, 6)
-                    .frame(maxWidth: max(0, maxWidth))
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(height: goalLabelHeight)
-                    .background {
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: 0,
-                            bottomLeadingRadius: 6,
-                            bottomTrailingRadius: 6,
-                            topTrailingRadius: 0
-                        )
-                        .fill(.black)
-                        .padding(.top, -1) // Cover subpixel seams at the shared edge.
-                    }
-                    .contentShape(Rectangle())
+            if let countdown = store.goal.countdown {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    caption(
+                        fraction: countdown.fractionRemaining(at: context.date),
+                        remaining: countdown.remainingText(at: context.date)
+                    )
+                }
+            } else {
+                caption(fraction: nil, remaining: nil)
             }
-            .buttonStyle(.plain)
-            .help(store.goal.text)
-            .accessibilityLabel("Edit goal: \(store.goal.text)")
-            .accessibilityIdentifier("one-goal-label")
         }
+    }
+
+    private func caption(fraction: Double?, remaining: String?) -> some View {
+        Button(action: action) {
+            Text(store.goal.text)
+                .font(.system(size: 8))
+                .foregroundStyle(.white.opacity(0.8))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 4)
+                .padding(.bottom, 1)
+                .frame(maxWidth: max(0, maxWidth))
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(height: goalLabelHeight)
+                .background {
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0,
+                        bottomLeadingRadius: 2,
+                        bottomTrailingRadius: 2,
+                        topTrailingRadius: 0
+                    )
+                    .fill(.black)
+                    .padding(.top, -1) // Cover subpixel seams at the shared edge.
+                }
+                .overlay(alignment: .bottom) {
+                    if let fraction {
+                        GeometryReader { geometry in
+                            Rectangle()
+                                .fill(.white.opacity(0.7))
+                                .frame(width: geometry.size.width * fraction, height: 1)
+                        }
+                        .frame(height: 1)
+                        .padding(.horizontal, 2)
+                        .accessibilityHidden(true)
+                    }
+                }
+                // Keep an 18pt click target without adding visible backing.
+                .padding(.bottom, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(remaining.map { "\(store.goal.text) (\($0) remaining)" } ?? store.goal.text)
+        .accessibilityLabel("Edit goal: \(store.goal.text)")
+        .accessibilityValue(remaining.map { "\($0) remaining" } ?? "No countdown")
+        .accessibilityIdentifier("one-goal-label")
+        .transaction { $0.disablesAnimations = true }
     }
 }
 

@@ -69,8 +69,6 @@ struct ContentView: View {
         return max(24, vm.effectiveClosedNotchHeight, screen?.safeAreaInsets.top ?? 0)
     }
 
-    private var countdownShoulderWidth: CGFloat { vm.notchState == .closed ? 32 : 0 }
-
     private var computedChinWidth: CGFloat {
         var chinWidth: CGFloat = vm.closedNotchSize.width
 
@@ -198,9 +196,6 @@ struct ContentView: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("notch-body")
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { notchBodySize = $0 }
-                    // Only the left shoulder grows for the ring. Offset half its
-                    // width so the camera spacer stays on the physical camera.
-                    .offset(x: -countdownShoulderWidth / 2)
                 if vm.chinHeight > 0 {
                     Rectangle()
                         .fill(Color.black.opacity(0.01))
@@ -316,13 +311,6 @@ struct ContentView: View {
                         }
                     }
                     .frame(minHeight: goalHeaderHeight)
-                    .padding(.leading, countdownShoulderWidth)
-                    .overlay(alignment: .leading) {
-                        if vm.notchState == .closed {
-                            OneGoalCountdownButton(action: openGoalEditor)
-                                .onHover(perform: handleGoalHover)
-                        }
-                    }
                     .accessibilityElement(children: .contain)
 
                       if coordinator.sneakPeek.show {
@@ -470,7 +458,7 @@ struct ContentView: View {
                     width: (coordinator.expandingView.show
                         && coordinator.expandingView.type == .music
                         && Defaults[.sneakPeekStyles] == .inline)
-                        ? min(380, windowSize.width - countdownShoulderWidth - 2 * max(0, vm.effectiveClosedNotchHeight - 12) - 16 - 2 * cornerRadiusInsets.closed.bottom)
+                        ? min(380, windowSize.width - 2 * max(0, vm.effectiveClosedNotchHeight - 12) - 16 - 2 * cornerRadiusInsets.closed.bottom)
                         : vm.closedNotchSize.width
                             + -cornerRadiusInsets.closed.top
                 )
@@ -531,6 +519,8 @@ struct ContentView: View {
 
     @ViewBuilder
     private var notchContextMenu: some View {
+        Button("One Goal", action: openGoalEditor)
+        Divider()
         Button("Settings") {
             DispatchQueue.main.async {
                 SettingsWindowController.shared.showWindow()

@@ -98,6 +98,27 @@ func movePointer(to point: CGPoint) {
     CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     Thread.sleep(forTimeInterval: 0.6)
 }
+func rightClickNotch() {
+    let body = frame(identified("notch-body")!)
+    let click = CGPoint(x: body.midX, y: min(16, body.midY))
+    for eventType in [CGEventType.rightMouseDown, .rightMouseUp] {
+        CGEvent(mouseEventSource: nil, mouseType: eventType, mouseCursorPosition: click, mouseButton: .right)?.post(tap: .cghidEventTap)
+    }
+}
+func openGoal() {
+    if let caption = identified("one-goal-label") {
+        expect(AXUIElementPerformAction(caption, kAXPressAction as CFString) == .success, "click goal caption")
+    } else {
+        rightClickNotch()
+        waitUntil("empty-state One Goal entry") {
+            contextMenuItems().contains { text($0, kAXTitleAttribute) == "One Goal" }
+        }
+        let entry = contextMenuItems().first { text($0, kAXTitleAttribute) == "One Goal" }!
+        expect(AXUIElementPerformAction(entry, kAXPressAction as CFString) == .success, "open One Goal from notch menu")
+    }
+    waitUntil("goal editor") { find(kAXTextFieldRole, "Goal") != nil }
+    movePointer(to: CGPoint(x: 40, y: 400))
+}
 func savedGoal() -> Data? {
     CFPreferencesAppSynchronize(appID as CFString)
     return CFPreferencesCopyAppValue(storageKey as CFString, appID as CFString) as? Data
@@ -109,7 +130,7 @@ func launch() {
     try! process.run()
     process.waitUntilExit()
     expect(process.terminationStatus == 0, "launch app")
-    waitUntil("collapsed ring") { find(kAXButtonRole, "Edit One Goal") != nil }
+    waitUntil("notch body") { identified("notch-body") != nil }
     Thread.sleep(forTimeInterval: 2) // Let startup media/battery activity settle.
 }
 func restart() {
@@ -122,24 +143,19 @@ expect(AXIsProcessTrusted(), "Accessibility automation available")
 expect(savedGoal() == nil, "no saved goal will be overwritten")
 if runningApp() == nil { launch() }
 
-let ringFrame = frame(find(kAXButtonRole, "Edit One Goal")!)
-movePointer(to: CGPoint(x: ringFrame.midX, y: ringFrame.midY))
-expect(find(kAXButtonRole, "Home") == nil, "hovering ring does not expand notch")
+expect(find(kAXButtonRole, "Edit One Goal") == nil, "standalone countdown ring is removed")
+expect(identified("one-goal-label") == nil, "empty state has no caption or timer")
 let screen = NSScreen.screens.first!
 movePointer(to: CGPoint(x: screen.frame.midX, y: 20))
 waitUntil("normal hover expansion") { find(kAXButtonRole, "Home") != nil }
-expect(true, "moving from ring to notch preserves hover expansion")
+expect(true, "normal notch hover still expands")
 movePointer(to: CGPoint(x: 40, y: 400))
 waitUntil("hover collapse") { find(kAXButtonRole, "Home") == nil }
 waitUntil("notch body geometry") { identified("notch-body") != nil }
 let emptyBodyFrame = frame(identified("notch-body")!)
 let emptyBodySize = emptyBodyFrame.size
-expect(emptyBodyFrame.contains(ringFrame), "countdown ring is inside the notch silhouette")
-if let leftArea = screen.auxiliaryTopLeftArea {
-    expect(ringFrame.maxX <= screen.frame.minX + leftArea.width + 2, "countdown ring stays clear of the camera")
-}
 
-press("Edit One Goal")
+openGoal()
 waitUntil("goal field") { find(kAXTextFieldRole, "Goal") != nil }
 expect(find(kAXButtonRole, "One Goal") != nil, "One Goal tab exists")
 expect(find(kAXButtonRole, "Shelf") != nil, "Shelf tab remains available")
@@ -156,7 +172,7 @@ sendKey(53) // Escape
 waitUntil("cancel collapsed") { find(kAXTextFieldRole, "Goal") == nil }
 expect(savedGoal() == nil, "Escape discards draft")
 
-press("Edit One Goal")
+openGoal()
 waitUntil("goal field") { find(kAXTextFieldRole, "Goal") != nil }
 typeText(goalText)
 sendKey(36) // Return
@@ -168,6 +184,11 @@ expect(true, "saving a goal does not change notch body size")
 let shortLabelFrame = frame(find(kAXButtonRole, "Edit goal: \(goalText)")!)
 expect(shortLabelFrame.width < emptyBodySize.width, "short goal label hugs its text")
 expect(abs(shortLabelFrame.minY - frame(identified("notch-body")!).maxY) < 0.5, "goal tab joins the notch with no gap")
+expect(shortLabelFrame.height <= 18, "caption keeps a small invisible click target")
+expect(text(identified("one-goal-label")!, kAXValueAttribute) == "No countdown", "unset countdown adds no timer indicator")
+movePointer(to: CGPoint(x: shortLabelFrame.midX, y: shortLabelFrame.minY + 5))
+expect(find(kAXButtonRole, "Home") == nil, "hovering caption does not expand notch")
+movePointer(to: CGPoint(x: 40, y: 400))
 
 press("Edit goal: \(goalText)")
 waitUntil("saved text restored") { find(kAXTextFieldRole, "Goal").map { text($0, kAXValueAttribute) == goalText } ?? false }
@@ -180,15 +201,20 @@ typeText("1")
 press("Start")
 expect(find(kAXButtonRole, "Clear") != nil, "countdown starts")
 press("Save")
+let initialCountdown = text(identified("one-goal-label")!, kAXValueAttribute)
+expect(initialCountdown.hasSuffix(" remaining"), "caption exposes remaining countdown")
+waitUntil("countdown underline refresh") { text(identified("one-goal-label")!, kAXValueAttribute) != initialCountdown }
+expect(true, "countdown caption refreshes without a separate timer")
 restart()
 expect(find(kAXButtonRole, "Edit goal: \(goalText)") != nil, "goal survives app restart")
-press("Edit One Goal")
+openGoal()
 waitUntil("restored countdown") { find(kAXButtonRole, "Clear") != nil }
 expect(true, "countdown survives app restart")
 press("Clear")
 expect(find(kAXButtonRole, "Clear") == nil, "countdown clears independently")
 press("Save")
-press("Edit One Goal")
+expect(text(identified("one-goal-label")!, kAXValueAttribute) == "No countdown", "clearing countdown removes caption progress")
+openGoal()
 press("Home")
 expect(find(kAXTextFieldRole, "Goal") == nil, "switching tabs exits editor")
 press("Shelf")
@@ -199,10 +225,10 @@ waitUntil("completed goal removed") { savedGoal() == nil && find(kAXButtonRole, 
 expect(true, "completion removes text and saved state")
 restart()
 expect(find(kAXTextFieldRole, "Goal") == nil && savedGoal() == nil, "completion survives app restart")
-expect(find(kAXButtonRole, "Edit One Goal") != nil, "empty state retains ring only")
+expect(find(kAXButtonRole, "Edit One Goal") == nil && identified("one-goal-label") == nil, "completed state has no goal or timer decoration")
 
 let longGoal = "Finish the proposal with a clear outcome for Maya and send the final reviewed version before starting another piece of work"
-press("Edit One Goal")
+openGoal()
 waitUntil("long-goal editor") { find(kAXTextFieldRole, "Goal") != nil }
 typeText(longGoal)
 press("Save")
@@ -223,16 +249,12 @@ let otherApp = NSRunningApplication.runningApplications(withBundleIdentifier: "c
 otherApp.activate(options: [])
 waitUntil("editor dismissed by another app") { find(kAXTextFieldRole, "Goal") == nil }
 expect(find(kAXButtonRole, "Edit goal: \(longGoal)") != nil, "clicking another app discards unsaved draft")
-press("Edit One Goal")
+openGoal()
 press("Complete")
 waitUntil("smoke state cleared") { savedGoal() == nil }
 expect(true, "smoke test leaves no saved goal")
 
-let body = frame(identified("notch-body")!)
-let click = CGPoint(x: body.midX, y: min(16, body.midY))
-for eventType in [CGEventType.rightMouseDown, .rightMouseUp] {
-    CGEvent(mouseEventSource: nil, mouseType: eventType, mouseCursorPosition: click, mouseButton: .right)?.post(tap: .cghidEventTap)
-}
+rightClickNotch()
 waitUntil("notch quit context menu") {
     contextMenuItems().contains { text($0, kAXTitleAttribute) == "Quit mynotch" }
 }

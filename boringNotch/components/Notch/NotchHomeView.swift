@@ -18,7 +18,6 @@ struct MusicPlayerView: View {
 
     var body: some View {
         HStack {
-            OneGoalCountdownButton(action: vm.openGoalEditor)
             AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).padding(.all, 5)
             MusicControlsView().drawingGroup().compositingGroup()
         }
