@@ -132,7 +132,12 @@ expect(true, "moving from ring to notch preserves hover expansion")
 movePointer(to: CGPoint(x: 40, y: 400))
 waitUntil("hover collapse") { find(kAXButtonRole, "Home") == nil }
 waitUntil("notch body geometry") { identified("notch-body") != nil }
-let emptyBodySize = frame(identified("notch-body")!).size
+let emptyBodyFrame = frame(identified("notch-body")!)
+let emptyBodySize = emptyBodyFrame.size
+expect(emptyBodyFrame.contains(ringFrame), "countdown ring is inside the notch silhouette")
+if let leftArea = screen.auxiliaryTopLeftArea {
+    expect(ringFrame.maxX <= screen.frame.minX + leftArea.width + 2, "countdown ring stays clear of the camera")
+}
 
 press("Edit One Goal")
 waitUntil("goal field") { find(kAXTextFieldRole, "Goal") != nil }
@@ -162,10 +167,11 @@ waitUntil("unchanged collapsed body") { frame(identified("notch-body")!).size ==
 expect(true, "saving a goal does not change notch body size")
 let shortLabelFrame = frame(find(kAXButtonRole, "Edit goal: \(goalText)")!)
 expect(shortLabelFrame.width < emptyBodySize.width, "short goal label hugs its text")
-expect(shortLabelFrame.minY >= frame(identified("notch-body")!).maxY, "goal label sits outside the notch body")
+expect(abs(shortLabelFrame.minY - frame(identified("notch-body")!).maxY) < 0.5, "goal tab joins the notch with no gap")
 
 press("Edit goal: \(goalText)")
 waitUntil("saved text restored") { find(kAXTextFieldRole, "Goal").map { text($0, kAXValueAttribute) == goalText } ?? false }
+expect(abs(frame(find(kAXButtonRole, "Edit goal: \(goalText)")!).minY - frame(identified("notch-body")!).maxY) < 0.5, "goal tab stays attached when expanded")
 let minutesField = find(kAXTextFieldRole, "Countdown minutes")!
 expect(AXUIElementSetAttributeValue(minutesField, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success, "focus countdown duration")
 sendKey(0, flags: .maskCommand) // Select all
@@ -206,6 +212,7 @@ expect(labelFrame.width <= 220, "long goal stays bounded to notch width")
 expect(labelFrame.width > shortLabelFrame.width, "label width follows text length")
 expect(frame(identified("notch-body")!).size == emptyBodySize, "long goal does not enlarge notch body")
 expect(labelFrame.height <= 20, "goal keeps a small click target below notch")
+expect(abs(labelFrame.minY - frame(identified("notch-body")!).maxY) < 0.5, "long goal tab has no gap below notch")
 expect(labelFrame.minY >= screen.safeAreaInsets.top, "goal stays below camera")
 expect(abs(labelFrame.midX - screen.frame.midX) < 1, "goal is centered below notch")
 press("Edit goal: \(longGoal)")

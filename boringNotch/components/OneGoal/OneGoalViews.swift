@@ -53,7 +53,16 @@ struct OneGoalLabel: View {
                     .frame(maxWidth: max(0, maxWidth))
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(height: goalLabelHeight)
-                    .background(.black, in: RoundedRectangle(cornerRadius: 4))
+                    .background {
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 0,
+                            bottomLeadingRadius: 6,
+                            bottomTrailingRadius: 6,
+                            topTrailingRadius: 0
+                        )
+                        .fill(.black)
+                        .padding(.top, -1) // Cover subpixel seams at the shared edge.
+                    }
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

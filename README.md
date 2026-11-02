@@ -2,8 +2,8 @@
 
 A personal fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch) with one persistent definition of done.
 
-- The active goal sits below the notch in a text-sized 8pt label without enlarging the notch. Nothing is shown there when empty.
-- A small countdown ring sits to the left of the music player, including when music is idle.
+- The active goal forms a text-sized 8pt lower tab, attached directly to the notch without widening its body. Nothing is shown there when empty.
+- A small countdown ring sits inside the notch's left shoulder, before the music player, including when music is idle.
 - Click the ring or goal text to open the One Goal tab beside Shelf.
 - A countdown is optional. Expiry is silent and does not complete the goal.
 - Complete clears the goal and countdown, including their saved state. No history is kept.

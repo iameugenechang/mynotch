@@ -62,13 +62,14 @@ struct ContentView: View {
         )
     }
 
-    // Keep the goal below both the physical camera and the menu bar, even with
-    // custom notch heights or fullscreen hiding enabled for other activities.
+    // Keep the attached goal below the physical camera, including with custom
+    // heights or fullscreen hiding enabled for other activities.
     private var goalHeaderHeight: CGFloat {
         let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) }
-        let menuBarHeight = screen.map { $0.frame.maxY - $0.visibleFrame.maxY } ?? 0
-        return max(24, vm.closedNotchSize.height, screen?.safeAreaInsets.top ?? 0, menuBarHeight)
+        return max(24, vm.effectiveClosedNotchHeight, screen?.safeAreaInsets.top ?? 0)
     }
+
+    private var countdownShoulderWidth: CGFloat { vm.notchState == .closed ? 32 : 0 }
 
     private var computedChinWidth: CGFloat {
         var chinWidth: CGFloat = vm.closedNotchSize.width
@@ -112,6 +113,7 @@ struct ContentView: View {
                         : cornerRadiusInsets.closed.bottom
                     )
                     .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
+                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil, alignment: .top)
                     .background(.black)
                     .clipShape(currentNotchShape)
                     .overlay(alignment: .top) {
@@ -124,13 +126,8 @@ struct ContentView: View {
                         color: ((vm.notchState == .open || isHovering) && Defaults[.enableShadow])
                             ? .black.opacity(0.7) : .clear, radius: Defaults[.cornerRadiusScaling] ? 6 : 4
                     )
-                    .padding(
-                        .bottom,
-                        vm.effectiveClosedNotchHeight == 0 ? 10 : 0
-                    )
                 
                 mainLayout
-                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil, alignment: .top)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
                         let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
@@ -201,6 +198,9 @@ struct ContentView: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("notch-body")
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { notchBodySize = $0 }
+                    // Only the left shoulder grows for the ring. Offset half its
+                    // width so the camera spacer stays on the physical camera.
+                    .offset(x: -countdownShoulderWidth / 2)
                 if vm.chinHeight > 0 {
                     Rectangle()
                         .fill(Color.black.opacity(0.01))
@@ -208,25 +208,12 @@ struct ContentView: View {
                 }
             }
 
-            // These are separate overlays, not rows or padding inside the black
-            // notch shape. Neither the text nor the ring changes its dimensions.
-            if !coordinator.helloAnimationRunning {
-                if vm.notchState == .closed && notchBodySize.width > 0 {
-                    OneGoalCountdownButton(action: openGoalEditor)
-                        .background(.black, in: Circle())
-                        .onHover(perform: handleGoalHover)
-                        .contextMenu { notchContextMenu }
-                        .offset(
-                            x: -notchBodySize.width / 2 - 14,
-                            y: max(0, (vm.effectiveClosedNotchHeight - 24) / 2)
-                        )
-                }
-                if !goalStore.goal.text.isEmpty {
-                    OneGoalLabel(maxWidth: vm.closedNotchSize.width - 20, action: openGoalEditor)
-                        .onHover(perform: handleGoalHover)
-                        .contextMenu { notchContextMenu }
-                        .offset(y: max(goalHeaderHeight, notchBodySize.height) + 2)
-                }
+            // A text-sized lower tab joins the body without changing its width.
+            if !coordinator.helloAnimationRunning && !goalStore.goal.text.isEmpty {
+                OneGoalLabel(maxWidth: vm.closedNotchSize.width - 20, action: openGoalEditor)
+                    .onHover(perform: handleGoalHover)
+                    .contextMenu { notchContextMenu }
+                    .offset(y: notchBodySize.height)
             }
         }
         .padding(.bottom, 8)
@@ -328,7 +315,14 @@ struct ContentView: View {
                             Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
                         }
                     }
-                    .frame(minHeight: vm.notchState == .open ? goalHeaderHeight : nil)
+                    .frame(minHeight: goalHeaderHeight)
+                    .padding(.leading, countdownShoulderWidth)
+                    .overlay(alignment: .leading) {
+                        if vm.notchState == .closed {
+                            OneGoalCountdownButton(action: openGoalEditor)
+                                .onHover(perform: handleGoalHover)
+                        }
+                    }
                     .accessibilityElement(children: .contain)
 
                       if coordinator.sneakPeek.show {
@@ -476,7 +470,7 @@ struct ContentView: View {
                     width: (coordinator.expandingView.show
                         && coordinator.expandingView.type == .music
                         && Defaults[.sneakPeekStyles] == .inline)
-                        ? min(380, windowSize.width - 2 * max(0, vm.effectiveClosedNotchHeight - 12) - 16 - 2 * cornerRadiusInsets.closed.bottom)
+                        ? min(380, windowSize.width - countdownShoulderWidth - 2 * max(0, vm.effectiveClosedNotchHeight - 12) - 16 - 2 * cornerRadiusInsets.closed.bottom)
                         : vm.closedNotchSize.width
                             + -cornerRadiusInsets.closed.top
                 )

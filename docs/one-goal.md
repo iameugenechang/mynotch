@@ -14,8 +14,8 @@ Enter 1 to 1440 minutes and click Start to save the current goal and begin an op
 - `models/OneGoalStore.swift` writes one Codable snapshot to UserDefaults under `oneGoal.current`. Emptying or completing the goal removes the key. There is no completion history.
 - A deadline, rather than a decrementing counter, keeps the countdown correct across sleep and relaunches. Remaining time is clamped to zero and the original duration.
 - `components/OneGoal/OneGoalViews.swift` contains the ring, the 8pt truncated label, and the editor. TimelineView refreshes countdown displays once a second without notifications, sounds, or continuous animations.
-- `ContentView.swift` measures the unchanged notch body and places the ring and goal as independent overlays. Neither adds a row or horizontal padding to the black notch shape. The expanded body keeps its original 640 by 190 point size.
-- The label hugs its text, with a small black backing and a capped width for long goals. It stays beneath both the notch body and the camera/menu-bar band, including below temporary music/HUD content. No empty-state label is drawn. Extra transparent window space accommodates the label without enlarging the notch.
+- The countdown ring sits inside a compact left shoulder of the same black notch shape. A one-sided 32 point inset reserves room for it; a matching half-width offset keeps the camera spacer centered on the physical camera. There is no separate timer bubble. The expanded body keeps its original 640 by 190 point size.
+- The goal forms a smaller attached lower tab: square top corners, rounded bottom corners, and no gap at the notch's lower edge. A one-point background overlap covers fractional-pixel seams. The tab hugs its text up to a width cap and never widens the main notch body. It stays attached in collapsed and expanded modes, including below temporary music/HUD content. No empty-state label is drawn. Extra transparent window space accommodates the lower tab.
 - Right-clicking the notch, goal text, or countdown ring offers Settings and Quit mynotch.
 - Goal visibility is independent of media fullscreen hiding. Existing selected-display/all-displays settings still decide where notch windows exist. All displays share one saved goal.
 - Only the explicitly opened One Goal editor allows its panel to become key. Automatic hover/drop/shortcut closure is blocked during editing. Save, Cancel, Complete, and losing keyboard focus end that protection. Switching tabs releases input focus.
@@ -48,9 +48,10 @@ Checked items below passed native smoke testing on one notched MacBook display. 
 - [x] Quit and relaunch. Confirm only the saved active goal/countdown return.
 - [ ] Start a one-minute countdown, sleep/wake, and let it expire. Confirm the ring empties without sound, notification, or goal completion.
 - [x] Clear the countdown, then complete a goal. Confirm each action clears only the intended state, and a completed goal does not return after relaunch.
-- [x] Save and reopen short and long goals. Confirm the label hugs the text up to its width cap, stays centered below the camera, and retains the full saved text. The notch body's size must not change.
+- [x] Save and reopen short and long goals. Confirm the lower tab hugs the text up to its width cap, stays centered below the camera, and retains the full saved text. The notch body's size must not change, and the tab must join its lower edge with no gap in either collapsed or expanded mode.
+- [x] Confirm the countdown ring is inside the notch body and its click target stays clear of the physical camera.
 - [x] Right-click the notch and choose Quit mynotch. Confirm Settings remains available and Quit terminates the app.
 - [ ] Try Unicode/emoji, pasted newlines, and whitespace-only text in the interface. Confirm tail truncation, full tooltip text, and an empty collapsed state.
 - [ ] Check playing/paused music, inline and standard sneak peeks, battery notices, volume/brightness HUDs, drag-and-drop Shelf, calendar, and camera.
-- [ ] Test custom notch heights, smaller display scaling, and a crowded menu bar. The ring has its own small backing beside the unchanged notch; verify that nearby menu items remain usable.
+- [ ] Test custom notch heights, smaller display scaling, and a crowded menu bar. The ring sits in a compact left shoulder of the notch; verify that nearby menu items remain usable.
 - [ ] Test full-screen Spaces on notched and external displays, all-displays mode, and unplugging/reconnecting a display. Open the editor on each display and verify focus stays on the clicked one.
