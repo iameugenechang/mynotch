@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A0D00E010000000000000018 /* AppIdentity in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E03000000000000000B /* AppIdentity */; };
+		A0D00E010000000000000019 /* AppIdentityAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E03000000000000000C /* AppIdentityAdapters */; };
 		A0D00E010000000000000017 /* SystemHUD in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E03000000000000000A /* SystemHUD */; };
 		A0D00E010000000000000015 /* ShelfFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000008 /* ShelfFeature */; };
 		A0D00E010000000000000016 /* ShelfAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000009 /* ShelfAdapters */; };
@@ -364,6 +366,8 @@
 				A0D00E010000000000000015 /* ShelfFeature in Frameworks */,
 				A0D00E010000000000000016 /* ShelfAdapters in Frameworks */,
 				A0D00E010000000000000017 /* SystemHUD in Frameworks */,
+				A0D00E010000000000000018 /* AppIdentity in Frameworks */,
+				A0D00E010000000000000019 /* AppIdentityAdapters in Frameworks */,
 				111BEA5F2ED07A340079DD4E /* MacroVisionKit in Frameworks */,
 				9A987A102C73CA8D005CA465 /* Collections in Frameworks */,
 				1194E8852EA57D23009C82D6 /* SkyLightWindow in Frameworks */,
@@ -841,6 +845,8 @@
 				A0D00E030000000000000008 /* ShelfFeature */,
 				A0D00E030000000000000009 /* ShelfAdapters */,
 				A0D00E03000000000000000A /* SystemHUD */,
+				A0D00E03000000000000000B /* AppIdentity */,
+				A0D00E03000000000000000C /* AppIdentityAdapters */,
 				14D032192C68F32E0096E6A1 /* LaunchAtLogin */,
 				14D0321C2C68F3350096E6A1 /* Sparkle */,
 				B18654382C6F4990000B926A /* KeyboardShortcuts */,
@@ -1093,7 +1099,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 2.7.3;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.mynotch.AnotchupXPCHelper;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.anotchup.AnotchupXPCHelper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SKIP_INSTALL = YES;
@@ -1118,7 +1124,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 2.7.3;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.mynotch.AnotchupXPCHelper;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.anotchup.AnotchupXPCHelper;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SKIP_INSTALL = YES;
@@ -1293,7 +1299,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 2.7.3;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.mynotch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.anotchup;
 				PRODUCT_NAME = anotchup;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1347,7 +1353,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 2.7.3;
-				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.mynotch;
+				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.anotchup;
 				PRODUCT_NAME = anotchup;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1491,6 +1497,8 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A0D00E03000000000000000B /* AppIdentity */ = {isa = XCSwiftPackageProductDependency; productName = AppIdentity; };
+		A0D00E03000000000000000C /* AppIdentityAdapters */ = {isa = XCSwiftPackageProductDependency; productName = AppIdentityAdapters; };
 		A0D00E03000000000000000A /* SystemHUD */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SystemHUD;

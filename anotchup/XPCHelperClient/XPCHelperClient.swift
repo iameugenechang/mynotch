@@ -7,7 +7,7 @@ import SystemHUD
 final class XPCHelperClient: NSObject {
     static let shared = XPCHelperClient()
     private final class Resource {
-        private let serviceName = "com.iameugenechang.mynotch.AnotchupXPCHelper"
+        private let serviceName = "com.iameugenechang.anotchup.AnotchupXPCHelper"
         let connection: NSXPCConnection
         let service: RemoteXPCService<AnotchupXPCHelperProtocol>
         init(disconnected: @escaping @MainActor () -> Void) {

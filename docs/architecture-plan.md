@@ -143,11 +143,11 @@ Gate per feature: production wiring uses the new boundary, adapter contracts pas
 
 ### 7. Migrate remaining app identity deliberately
 
-- [ ] Inventory UserDefaults, Shelf files/bookmarks, temporary storage, Keychain/authentication, login items, permissions, helper names, and update configuration before changing identifiers.
-- [ ] Move toward `com.iameugenechang.anotchup` and a matching helper identity with explicit legacy reads/migration, not an empty new preferences domain.
-- [ ] Specify precedence when both old and new data exist. Make migration idempotent and interruption-safe; do not delete the source data during initial migration.
-- [ ] Test fresh install, existing `mynotch` data, already-migrated state, corrupt data, partial migration, and storage failures using isolated domains/directories.
-- [ ] Document permissions that macOS may require again. Do not promise to migrate OS permission grants.
+- [x] Inventory UserDefaults, Shelf files/bookmarks, temporary storage, Keychain/authentication, login items, permissions, helper names, and update configuration before changing identifiers.
+- [x] Use `com.iameugenechang.anotchup` and a matching helper identity with migration before app construction.
+- [x] Destination values win; the completion marker prevents resurrection. Partial domains can retry and source data is retained. Read-back verification is not a disk-durability guarantee.
+- [x] Test fresh install, legacy opaque data, already-migrated state, invalid markers/property lists, partial migration, dropped writes, and storage failures using isolated domains/directories.
+- [x] Document permissions that macOS may require again. Do not promise to migrate OS permission grants.
 
 Gate: migration tests pass, the packaged helper resolves under the new identity, and preserved data can be reconstructed. No remote repository rename or release publication is implied.
 
@@ -265,6 +265,10 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 ## System HUD and connection ownership slice
 
 `SystemHUD` now owns validated HUD messages, authorization/activation ordering, and connection generations. Composition supplies native effects. Five tests and the unsigned Debug build passed (`/tmp/anotchup-hud-build.log`, 69 XCTest cases plus existing suites). The XPC client rejects replaced-connection results and stale invalidation callbacks; authorization monitoring is main-actor confined and stops explicitly. Native signed-helper/event-tap acceptance is not claimed. See [the System HUD contract](system-hud-contract.md).
+
+## Identity migration slice
+
+`AppIdentity` and `AppIdentityAdapters` migrate preferences before app construction. App/helper metadata now use the new identity. Three package tests share real isolated UserDefaults and memory cases; a static test guards bootstrap ordering. `scripts/verify.sh --build` passed 72 XCTest cases and the other suites (`/tmp/anotchup-identity-build.log`). No actual user domain was read or migrated by verification. See [identity migration](identity-migration.md); signed helper resolution and OS permission acceptance remain manual.
 
 ## Current compatibility exceptions
 

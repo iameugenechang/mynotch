@@ -25,7 +25,7 @@ import Foundation
 /*
  To use the service from an application or other process, use NSXPCConnection to establish a connection to the service by doing something like this:
 
-     connectionToService = NSXPCConnection(serviceName: "com.iameugenechang.mynotch.AnotchupXPCHelper")
+     connectionToService = NSXPCConnection(serviceName: "com.iameugenechang.anotchup.AnotchupXPCHelper")
      connectionToService.remoteObjectInterface = NSXPCInterface(with: (any AnotchupXPCHelperProtocol).self)
      connectionToService.resume()
 

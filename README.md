@@ -31,7 +31,7 @@ To launch the built app manually:
 open /tmp/anotchup-build/Build/Products/Debug/anotchup.app
 ```
 
-The app builds as `anotchup.app`. It retains the existing `com.iameugenechang.mynotch` bundle identifier so this branding change does not switch preferences domains. Preferences remain separate from upstream boring.notch. Upstream auto-updates stay disabled.
+The app builds as `anotchup.app`, with bundle identifier `com.iameugenechang.anotchup`. Existing fork preferences migrate before app construction without deleting the old domain. See [identity migration](docs/identity-migration.md), including permissions that macOS may require again. Upstream auto-updates stay disabled.
 
 The project, source paths, app-owned types, and XPC helper now use anotchup names. Shelf storage copies to the new path without deleting the original. See the [rename contract](docs/rename-contract.md) for compatibility exceptions and the [architecture plan](docs/architecture-plan.md) for remaining work. Inherited publishing workflows are disabled, not configured for fork releases.
 

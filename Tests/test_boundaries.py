@@ -30,6 +30,8 @@ class ComponentBoundaryTests(unittest.TestCase):
             {"name": "CalendarFeature", "dependencies": []},
             {"name": "CameraFeature", "dependencies": []},
             {"name": "SystemHUD", "dependencies": []},
+            {"name": "AppIdentity", "dependencies": []},
+            {"name": "AppIdentityAdapters", "dependencies": [{"byName": ["AppIdentity", None]}]},
             {"name": "ShelfFeature", "dependencies": []},
             {"name": "ShelfAdapters", "dependencies": [{"byName": ["ShelfFeature", None]}]},
         ]}
@@ -57,6 +59,8 @@ class ComponentBoundaryTests(unittest.TestCase):
                     {"name": "CalendarFeature", "dependencies": []},
                     {"name": "CameraFeature", "dependencies": []},
                     {"name": "SystemHUD", "dependencies": []},
+                    {"name": "AppIdentity", "dependencies": []},
+                    {"name": "AppIdentityAdapters", "dependencies": [{"byName": ["AppIdentity", None]}]},
                     {"name": "ShelfFeature", "dependencies": []},
                     {"name": "ShelfAdapters", "dependencies": [{"byName": ["ShelfFeature", None]}]},
                 ]}

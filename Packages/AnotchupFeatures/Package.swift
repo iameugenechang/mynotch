@@ -5,6 +5,8 @@ let package = Package(
     name: "AnotchupFeatures",
     platforms: [.macOS(.v14)],
     products: [
+        .library(name: "AppIdentity", targets: ["AppIdentity"]),
+        .library(name: "AppIdentityAdapters", targets: ["AppIdentityAdapters"]),
         .library(name: "SystemHUD", targets: ["SystemHUD"]),
         .library(name: "ShelfFeature", targets: ["ShelfFeature"]),
         .library(name: "ShelfAdapters", targets: ["ShelfAdapters"]),
@@ -17,6 +19,9 @@ let package = Package(
         .library(name: "WorkingOnAdapters", targets: ["WorkingOnAdapters"]),
     ],
     targets: [
+        .target(name: "AppIdentity"),
+        .target(name: "AppIdentityAdapters", dependencies: ["AppIdentity"]),
+        .testTarget(name: "AppIdentityTests", dependencies: ["AppIdentity", "AppIdentityAdapters"]),
         .target(name: "SystemHUD"),
         .testTarget(name: "SystemHUDTests", dependencies: ["SystemHUD"]),
         .target(name: "ShelfFeature"),

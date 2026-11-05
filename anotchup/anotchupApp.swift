@@ -5,6 +5,8 @@
 //  Created by Harsh Vardhan  Goswami  on 02/08/24.
 //
 
+import AppIdentity
+import AppIdentityAdapters
 import AVFoundation
 import Combine
 import Defaults
@@ -16,7 +18,24 @@ import SystemHUD
 import WorkingOn
 import WorkingOnAdapters
 
+/// Migration must precede property wrappers and app-delegate/service construction.
 @main
+enum AnotchupBootstrap {
+    @MainActor
+    static func main() {
+        do {
+            try PreferencesMigration.run(
+                source: UserDefaultsDomain(name: "com.iameugenechang.mynotch"),
+                destination: UserDefaultsDomain(name: "com.iameugenechang.anotchup"))
+        } catch {
+            // Do not start services with an unverified, apparently empty domain.
+            fputs("anotchup preference migration failed: \(error)\n", stderr)
+            exit(EXIT_FAILURE)
+        }
+        AnotchupApp.main()
+    }
+}
+
 struct AnotchupApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Default(.menubarIcon) var showMenuBarIcon

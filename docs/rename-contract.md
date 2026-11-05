@@ -4,7 +4,7 @@
 
 The Xcode project, scheme, source directory, and app product are `anotchup`. App-owned branded types use `Anotchup`; extracted components keep responsibility names such as `OneGoalStore` and `NotchDelayedActionSession`. The helper target, product, and protocol use `AnotchupXPCHelper`.
 
-The main bundle identifier stays `com.iameugenechang.mynotch`. Changing it would switch preferences domains and affect OS-managed identity. The embedded helper and client service name both use `com.iameugenechang.mynotch.AnotchupXPCHelper`. Static checks and the unsigned build verify matching identifiers and embedding, not a live signed XPC connection or retained permission grants.
+The main bundle identifier is `com.iameugenechang.anotchup`. The embedded helper and client service name both use `com.iameugenechang.anotchup.AnotchupXPCHelper`. Preferences migrate before app construction from the retained legacy domain. See [app identity migration](identity-migration.md) for precedence, failures, and OS-managed permissions. Static checks and the unsigned build verify matching identifiers and embedding, not a live signed XPC connection or retained permission grants.
 
 Working on keys, Codable fields, appearance preferences, and other non-branded settings do not change. The repository remains `https://github.com/iameugenechang/mynotch`.
 
@@ -16,7 +16,7 @@ Working on keys, Codable fields, appearance preferences, and other non-branded s
 2. Otherwise, if `boringNotch/Shelf` exists, copy its contents into a temporary sibling directory, then move the complete copy to the new location.
 3. If neither exists, create the new directory.
 
-The migration does not decode or rewrite `items.json`, bookmarks, or file references. It does not delete the old directory. A thrown copy failure cleans its staging directory and leaves the destination absent. The persistence service falls back to the old directory when available and retries migration on the next launch. The existing Shelf decoder still handles malformed records.
+The migration does not decode or rewrite `items.json`, bookmarks, or file references. It does not delete the old directory. A thrown copy failure cleans its staging directory and leaves the destination absent. The persistence service falls back to the old directory when available and retries migration on the next launch. Malformed Shelf JSON fails explicitly and blocks writes until a successful reload.
 
 A process crash during copying may leave an unused staging directory. It cannot publish that incomplete copy as the destination. This is not a disk-durability guarantee or a migration of macOS security-scoped access grants.
 

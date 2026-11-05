@@ -37,8 +37,8 @@ class IdentityTests(unittest.TestCase):
 
     def test_app_and_helper_identity_agree(self):
         project = (ROOT / "anotchup.xcodeproj/project.pbxproj").read_text()
-        self.assertEqual(project.count("PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.mynotch;"), 2)
-        helper = "com.iameugenechang.mynotch.AnotchupXPCHelper"
+        self.assertEqual(project.count("PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.anotchup;"), 2)
+        helper = "com.iameugenechang.anotchup.AnotchupXPCHelper"
         self.assertEqual(project.count(f"PRODUCT_BUNDLE_IDENTIFIER = {helper};"), 2)
         client = (ROOT / "anotchup/XPCHelperClient/XPCHelperClient.swift").read_text()
         self.assertIn(f'private let serviceName = "{helper}"', client)
@@ -46,6 +46,14 @@ class IdentityTests(unittest.TestCase):
         self.assertIn("name = anotchup;", project)
         self.assertTrue((ROOT / "AnotchupXPCHelper/AnotchupXPCHelperProtocol.swift").exists())
         self.assertTrue((ROOT / "anotchup/XPCHelperClient/AnotchupXPCHelperProtocol.swift").exists())
+
+    def test_migration_precedes_app_construction(self):
+        app = (ROOT / "anotchup/anotchupApp.swift").read_text()
+        self.assertIn("@main\nenum AnotchupBootstrap", app)
+        self.assertNotIn("@main\nstruct AnotchupApp", app)
+        self.assertLess(app.index("try PreferencesMigration.run("), app.index("AnotchupApp.main()"))
+        self.assertIn('source: UserDefaultsDomain(name: "com.iameugenechang.mynotch")', app)
+        self.assertIn('destination: UserDefaultsDomain(name: "com.iameugenechang.anotchup")', app)
 
     def test_publishing_is_quarantined(self):
         for name in ("release.yml", "nightly.yml", "static.yml", "crowdin.yml"):
