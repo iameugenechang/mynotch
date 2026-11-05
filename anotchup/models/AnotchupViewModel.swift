@@ -22,6 +22,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
     @Published var contentType: ContentType = .normal
     @Published private(set) var notchState: NotchState = .closed
     let interactions: NotchInteractionLifetime
+    let displayLifetimeID = UUID()
 
     @Published var dragDetectorTargeting: Bool = false
     @Published var generalDropTargeting: Bool = false
@@ -35,7 +36,9 @@ class AnotchupViewModel: NSObject, ObservableObject {
     @Published var edgeAutoOpenActive: Bool = false
     @Published var isHoveringCalendar: Bool = false
     @Published var isBatteryPopoverActive: Bool = false
-    @Published var isGoalEditorActive = false
+    @Published var isGoalEditorActive = false {
+        didSet { coordinator.navigation.requestEditor(isGoalEditorActive, on: displayLifetimeID) }
+    }
 
     @Published var screenUUID: String?
 
@@ -50,6 +53,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
     // invalidates the owner so retained native callbacks cannot restart its work.
     func destroy() {
         interactions.invalidate()
+        coordinator.navigation.remove(displayLifetimeID)
         cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
     }
@@ -63,6 +67,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
         animation = animationLibrary.animation
 
         super.init()
+        coordinator.navigation.register(displayLifetimeID)
         
         self.screenUUID = screenUUID
         notchSize = getClosedNotchSize(screenUUID: screenUUID)
@@ -250,16 +255,12 @@ class AnotchupViewModel: NSObject, ObservableObject {
         self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false
 
-        // Do not change the shared tab while another display is taking editor focus.
-        guard resetSelectedTab else { return }
-
-        // Set the current view to shelf if it contains files and the user enables openShelfByDefault
-        // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
-        if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
-            coordinator.currentView = .shelf
-        } else if !coordinator.openLastTabByDefault {
-            coordinator.currentView = .home
-        }
+        coordinator.navigation.close(
+            resetSelection: resetSelectedTab,
+            shelfHasItems: !ShelfStateViewModel.shared.isEmpty,
+            opensShelf: Defaults[.openShelfByDefault],
+            keepsLastTab: coordinator.openLastTabByDefault
+        )
     }
 
     func closeHello() {

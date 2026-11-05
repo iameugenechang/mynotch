@@ -37,8 +37,6 @@ struct ContentView: View {
     @State private var notchContentSize = CGSize.zero
     @State private var collapsedTimerWidth: CGFloat = 0
     @State private var timerTracksClosedWidth = true
-    @State private var timerResizeTask: Task<Void, Never>?
-    @State private var anyDropDebounceTask: Task<Void, Never>?
 
     @State private var gestureProgress: CGFloat = .zero
 
@@ -129,16 +127,21 @@ struct ContentView: View {
     }
 
     private func refreshTimerTracking() {
-        timerResizeTask?.cancel()
+        vm.interactions.cancel(.resize)
         timerTracksClosedWidth = false
         guard vm.notchState == .closed, !showsNotchPreview else { return }
-        // Resume only after both expansion and temporary previews have settled.
-        timerResizeTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(700))
-            guard !Task.isCancelled, vm.notchState == .closed, !showsNotchPreview else { return }
-            updateCollapsedTimerWidth()
-            timerTracksClosedWidth = true
-        }
+        let contentSize = $notchContentSize
+        let width = $collapsedTimerWidth
+        let tracking = $timerTracksClosedWidth
+        vm.interactions.schedule(.resize, after: .milliseconds(700), state: { [weak vm, weak coordinator] in
+            NotchInteractionState(isOpen: vm?.notchState != .closed,
+                isPreviewVisible: coordinator?.sneakPeek.show == true || coordinator?.expandingView.show == true)
+        }, apply: { [weak vm] _ in
+            guard vm != nil else { return }
+            width.wrappedValue = OneGoalLayout.timerWidth(notchWidth: contentSize.wrappedValue.width,
+                curveInset: cornerRadiusInsets.closed.top + cornerRadiusInsets.closed.bottom)
+            tracking.wrappedValue = true
+        })
     }
 
     private var goalCurvePadding: CGFloat {
@@ -278,16 +281,12 @@ struct ContentView: View {
         .onDisappear {
             cancelHoverInteraction()
             vm.cancelDelayedInteractions()
-            anyDropDebounceTask?.cancel()
-            anyDropDebounceTask = nil
-            timerResizeTask?.cancel()
-            timerResizeTask = nil
             isHovering = false
             isHoveringGoalControl = false
             isPointerInsideNotch = false
         }
         .onChange(of: vm.anyDropZoneTargeting) { _, isTargeted in
-            anyDropDebounceTask?.cancel()
+            vm.interactions.cancel(.drag)
 
             if isTargeted {
                 if vm.notchState == .closed {
@@ -297,20 +296,16 @@ struct ContentView: View {
                 return
             }
 
-            anyDropDebounceTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                guard !Task.isCancelled else { return }
-
-                if vm.dropEvent {
-                    vm.dropEvent = false
-                    return
-                }
-
+            vm.interactions.schedule(.dragExit, after: .milliseconds(500), state: { [weak vm] in
+                NotchInteractionState(isOpen: vm?.notchState == .open,
+                    isSharing: SharingStateManager.shared.preventNotchClose,
+                    isEditorActive: vm?.isGoalEditorActive == true,
+                    hasPendingDrop: vm?.dropEvent == true)
+            }, apply: { [weak vm] effect in
+                guard case .endDrag(let shouldClose) = effect, let vm else { return }
                 vm.dropEvent = false
-                if !SharingStateManager.shared.preventNotchClose {
-                    vm.close()
-                }
-            }
+                if shouldClose { vm.close() }
+            })
         }
     }
 
@@ -682,6 +677,8 @@ struct ContentView: View {
             case .endHover(let shouldClose):
                 withAnimation(animation) { hovering.wrappedValue = false }
                 if shouldClose { vm.close() }
+            case .endDrag, .resize, .hidePreview:
+                break // These effects are handled by their own display lanes.
             }
         })
     }

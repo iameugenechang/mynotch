@@ -112,7 +112,8 @@ Gate: the app uses the extracted implementation, not a parallel copy. Existing b
 
 - [x] Characterize hover-open/exit, battery/sharing close guards, and editor close protection.
 - [x] Extract hover decisions and pending-ticket ownership into `NotchShell`, with one session per display view model.
-- [ ] Characterize and extract drag, remaining expansion/layout, preview dismissal, and tab-default decisions.
+- [x] Extract drag-exit, delayed width tracking, preview dismissal, and tab-default decisions, with deterministic tests.
+- [ ] Finish expansion/geometry policy and native display lifecycle composition.
 - [ ] Complete display-session and editor-focus ownership. Preserve shared tab semantics.
 - [ ] Move window creation, permission prompts, and cross-feature refresh wiring out of shell logic.
 - [x] Test stale/replaced/canceled hover tickets, recreation, and independent sessions without native services.
@@ -237,7 +238,13 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 - Added eight component lifetime tests and two shared adapter-conformance tests. Tests cover cancellation-token ownership, stale callbacks, independent displays/lanes, recreation, reentrant effects, callback/owner release, and real task delivery. Manual time handles policy cases; bounded asynchronous waits exercise the production adapter. Tests do not construct app view models or native windows.
 - `scripts/verify.sh --build` passed 36 XCTest cases, the existing 499 assertions/checks, four boundary-rule and four identity Python tests, 39 workflow utility tests, Shelf migration tests, project/whitespace checks, and the unsigned Debug build. No app launch, installation, audio, permission prompt, or desktop interaction occurred. The existing MediaRemoteAdapter macOS 14/15 warning remains. Native focus and host lifecycle-event wiring are still untested.
 
-Next slice: characterize shared navigation and editor-focus transfer, then extract that policy without changing shared tab behavior. Drag, preview, geometry, host lifecycle-event wiring, and cross-feature effects still need work. Do not treat the shell checklist as complete.
+## Shared navigation and presentation lifetime slice
+
+- Added `NotchNavigation`: shared tab selection, registered display lifetime IDs, editor requests, and native focus ownership. Close-default precedence is unchanged. Native focus transfer no longer scans application windows; either callback order preserves the destination editor. Removed windows cannot reset shared tabs.
+- Added drag and resize lanes to the tested interaction owner. The existing 500 ms drag exit and 700 ms width-tracking delay now use injected scheduling and delivery-time guards. Views retain geometry measurement and animation, not task ownership.
+- Moved compact/expanded preview timers to independent owner lanes. Replacement, cancellation, lock/unlock, and termination reject old hide callbacks. Preview updates are atomic on the main actor. Invalid HUD notification payload types are ignored rather than force-cast.
+- Added six test cases for navigation/transfer, drag protection, resize guards, independent preview replacement, and teardown. `scripts/verify.sh --build` passed 42 XCTest cases plus the existing verification suites and unsigned Debug build. No app or native focus operation was launched.
+- Native lifecycle-event composition, geometry, camera commands, and cross-feature refresh remain in the host. The full-plan request is still in progress; these tests do not complete the shell checklist.
 
 ## Current compatibility exceptions
 

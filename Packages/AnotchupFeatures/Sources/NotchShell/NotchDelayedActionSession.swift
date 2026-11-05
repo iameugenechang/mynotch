@@ -11,10 +11,12 @@ public struct NotchInteractionState: Sendable {
     public var isBatteryPopoverActive: Bool
     public var isSharing: Bool
     public var isEditorActive: Bool
+    public var hasPendingDrop: Bool
 
     public init(isOpen: Bool, isHovering: Bool = false, isHoveringGoalControl: Bool = false,
                 isPreviewVisible: Bool = false, opensOnHover: Bool = true,
-                isBatteryPopoverActive: Bool = false, isSharing: Bool = false, isEditorActive: Bool = false) {
+                isBatteryPopoverActive: Bool = false, isSharing: Bool = false, isEditorActive: Bool = false,
+                hasPendingDrop: Bool = false) {
         self.isOpen = isOpen
         self.isHovering = isHovering
         self.isHoveringGoalControl = isHoveringGoalControl
@@ -23,6 +25,7 @@ public struct NotchInteractionState: Sendable {
         self.isBatteryPopoverActive = isBatteryPopoverActive
         self.isSharing = isSharing
         self.isEditorActive = isEditorActive
+        self.hasPendingDrop = hasPendingDrop
     }
 
     /// The common guard for every close source, including shortcuts and gestures.
@@ -43,10 +46,12 @@ public struct NotchInteractionState: Sendable {
 /// The host owns delays and cancels their tasks; tickets also reject callbacks
 /// queued before cancellation. Mutate each instance on the host's main actor.
 public struct NotchDelayedActionSession: Sendable {
-    public enum Request: Equatable, Sendable { case open, leave, closeAfterProtection, shortcutClose }
+    public enum Request: Equatable, Sendable { case open, leave, closeAfterProtection, shortcutClose, dragExit, resize, hideCompactPreview, hideExpandedPreview }
     public enum Effect: Equatable, Sendable {
         case open, close
         case endHover(shouldClose: Bool)
+        case endDrag(shouldClose: Bool)
+        case resize, hidePreview
     }
     public struct Ticket: Equatable, Sendable {
         fileprivate let id: UUID
@@ -79,6 +84,12 @@ public struct NotchDelayedActionSession: Sendable {
             return .endHover(shouldClose: state.canCloseAfterHover)
         case .closeAfterProtection:
             return !state.isHovering && state.canCloseAfterHover ? .close : nil
+        case .hideCompactPreview, .hideExpandedPreview:
+            return state.isPreviewVisible ? .hidePreview : nil
+        case .dragExit:
+            return .endDrag(shouldClose: !state.hasPendingDrop && state.canClose)
+        case .resize:
+            return !state.isOpen && !state.isPreviewVisible ? .resize : nil
         case .shortcutClose:
             // Preserve deliberate shortcut behavior: pointer and battery guards
             // apply only to hover closes, but editor/sharing protection always applies.

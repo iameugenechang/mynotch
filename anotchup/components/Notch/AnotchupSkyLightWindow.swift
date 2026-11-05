@@ -112,15 +112,18 @@ class AnotchupSkyLightWindow: NSPanel {
     
     override var canBecomeKey: Bool { goalViewModel?.isGoalEditorActive == true }
 
+    override func becomeKey() {
+        super.becomeKey()
+        if let vm = goalViewModel { vm.coordinator.navigation.becameKey(vm.displayLifetimeID) }
+    }
+
     override func resignKey() {
         super.resignKey()
         // Clicking another app dismisses the editor without saving its draft.
         if let vm = goalViewModel, vm.isGoalEditorActive {
+            let resetTab = vm.coordinator.navigation.resignedKey(vm.displayLifetimeID)
             vm.isGoalEditorActive = false
-            let transferringEditor = NSApp.windows.contains { window in
-                window !== self && (window as? AnotchupSkyLightWindow)?.goalViewModel?.isGoalEditorActive == true
-            }
-            vm.close(resetSelectedTab: !transferringEditor)
+            vm.close(resetSelectedTab: resetTab)
         }
     }
     override var canBecomeMain: Bool { false }

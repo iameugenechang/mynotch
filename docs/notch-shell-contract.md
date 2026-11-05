@@ -4,11 +4,11 @@ This is a partial shell extraction, not a complete window/session architecture. 
 
 ## Ownership
 
-Each main-actor `AnotchupViewModel` owns one `NotchInteractionLifetime`. That owner holds separate hover and shortcut lanes, including their policy tickets, cancellation tokens, state readers, and effect callbacks. App composition injects `TaskNotchDelayScheduler`; previews can use the view model's convenience initializer.
+Each main-actor `AnotchupViewModel` owns one `NotchInteractionLifetime`. That owner holds separate hover, shortcut, drag, and resize lanes, including their policy tickets, cancellation tokens, state readers, and effect callbacks. App composition injects `TaskNotchDelayScheduler`; previews can use the view model's convenience initializer.
 
 `ContentView` supplies hover state and applies animation/window effects. The view model supplies shortcut state and effects. Both read current protection at delivery, not when scheduling. Callbacks capture the model weakly; hover callbacks capture the required SwiftUI state bindings instead of the whole view. State readers must be side-effect-free. Effect callbacks may cancel or schedule more work.
 
-Shared tab selection stays in `AnotchupViewCoordinator`. Native editor-focus transfer, window creation, screen geometry, camera authorization, and media refresh still live in the app. This slice does not change their shared/per-display semantics.
+The coordinator owns one `NotchNavigation` for shared tab selection and editor-focus requests, plus a lifetime owner for compact/expanded previews. Window creation, geometry measurement, camera authorization, media refresh, and native focus effects still live in the app.
 
 ## Decisions
 
@@ -37,9 +37,9 @@ Shared tab selection stays in `AnotchupViewCoordinator`. Native editor-focus tra
 
 Delivery removes the pending entry before reading state or applying effects. A callback can therefore schedule another action without the completed action erasing it. Stale delivery neither reads host state nor applies effects.
 
-Pointer reentry and goal-control hover cancel only the hover lane. Explicit open, successful close, and shortcut toggle cancel both lanes synchronously. App wiring also cancels on root disappearance, lock/unlock, display reassignment, and window cleanup. Removed view models and termination permanently invalidate their owners and cancel subscriptions. A retained callback cannot restart a removed owner's delayed work. Shortcut routing rejects missing display owners rather than using an invisible fallback model.
+Pointer reentry and goal-control hover cancel only the hover lane. Explicit open, successful close, and shortcut toggle cancel all display lanes synchronously. App wiring also cancels on root disappearance, lock/unlock, display reassignment, and window cleanup. Removed view models and termination permanently invalidate their owners and cancel subscriptions. A retained callback cannot restart a removed owner's delayed work. Shortcut routing rejects missing display owners rather than using an invisible fallback model.
 
-View disappearance also cancels existing drag-debounce and timer-width tasks and clears local hover flags. Those tasks' policies have not moved into the package.
+View disappearance cancels drag/resize registrations and clears local hover flags. Drag exit waits 500 ms, consumes a recorded drop without closing, and otherwise respects editor/sharing protection. Resize waits 700 ms and resumes width tracking only if closed without a preview. Compact and expanded preview hide requests use independent lanes; replaced or canceled callbacks cannot hide newer content. Lock/unlock and termination cancel previews.
 
 The earlier extraction added deliberate safety changes: pending hover-open rechecks the preference; reopening invalidates older decisions; opening outside the pointer clears lingering visual hover. Shortcut timers are display-local: opening display B does not cancel display A's timer. Hover reentry does not cancel shortcut auto-close. The lifetime extraction preserves these rules.
 
@@ -51,6 +51,8 @@ Tests in `Packages/AnotchupFeatures/Tests/NotchShellTests` use public imports, w
 - Eight lifetime tests cover real cancellation-token ownership, independent lanes/displays, terminal removal, recreation, queued stale callbacks, reentrant effects, callback release, owner release, and composition with the real task adapter.
 - Two scheduler tests run shared conformance cases against the manual and real adapters, including deferred delivery, one-shot behavior, token cancellation/release, zero/negative delays, and independence.
 
-These 25 shell cases require no windows, camera/media services, or desktop interaction. Most use manual time; the real-adapter cases use bounded asynchronous waits. They do not prove exact timing, SwiftUI callback ordering, or native focus transfer. `scripts/verify.sh --build` also checks package boundaries, the existing Working on suites, and production app compilation.
+Three navigation cases cover close-default precedence, transfer in either native callback order, and removal/canceled requests. Three presentation cases cover drag, resize, preview lane replacement, and teardown.
 
-Still outside the automated contracts: host lifecycle-event wiring, drag/drop decisions, shared preview timing, tab-reset policy, actual lock/unlock/display removal, and window/focus composition. Host cancellation calls compile, but package tests do not invoke the app delegate or create SwiftUI trees. Manual acceptance should cover fast exit/reentry, reopening before a shortcut deadline, shortcut use on two displays, editor/battery/share protection, display removal/lock transitions, and focus transfer. No automated check launches the app to perform those actions.
+These 31 shell cases require no windows, camera/media services, or desktop interaction. Most use manual time; the real-adapter cases use bounded asynchronous waits. They do not prove exact timing, SwiftUI callback ordering, or native focus transfer. `scripts/verify.sh --build` also checks package boundaries, the existing Working on suites, and production app compilation.
+
+Still outside the automated contracts: host lifecycle-event wiring, geometry measurement, actual lock/unlock/display removal, and native window/focus composition. Host cancellation calls compile, but package tests do not invoke the app delegate or create SwiftUI trees. Manual acceptance should cover fast exit/reentry, reopening before a shortcut deadline, shortcut use on two displays, editor/battery/share protection, display removal/lock transitions, and focus transfer. No automated check launches the app to perform those actions.

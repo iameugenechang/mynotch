@@ -8,6 +8,8 @@
 import AppKit
 import Combine
 import Defaults
+import NotchShell
+import NotchShellAdapters
 import SwiftUI
 
 enum SneakContentType {
@@ -50,10 +52,14 @@ struct ExpandedItem {
 class AnotchupViewCoordinator: ObservableObject {
     static let shared = AnotchupViewCoordinator()
 
-    @Published var currentView: NotchViews = .home
+    let navigation = NotchNavigation()
+    private var navigationObservation: AnyCancellable?
+    var currentView: NotchViews {
+        get { navigation.selection }
+        set { navigation.select(newValue) }
+    }
     @Published var helloAnimationRunning: Bool = false
-    private var sneakPeekDispatch: DispatchWorkItem?
-    private var expandingViewDispatch: DispatchWorkItem?
+    private let previewLifetime = NotchInteractionLifetime(scheduler: TaskNotchDelayScheduler())
     private var hudEnableTask: Task<Void, Never>?
 
     @AppStorage("firstLaunch") var firstLaunch: Bool = true
@@ -102,6 +108,9 @@ class AnotchupViewCoordinator: ObservableObject {
     private var hudReplacementCancellable: AnyCancellable?
 
     private init() {
+        navigationObservation = navigation.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
         // Perform migration from name-based to UUID-based storage
         if preferredScreenUUID == nil, let legacyName = legacyPreferredScreenName {
             // Try to find screen by name and migrate to UUID
@@ -177,8 +186,9 @@ class AnotchupViewCoordinator: ObservableObject {
     
     @objc func sneakPeekEvent(_ notification: Notification) {
         let decoder = JSONDecoder()
+        guard let data = notification.userInfo?.values.compactMap({ $0 as? Data }).first else { return }
         if let decodedData = try? decoder.decode(
-            SharedSneakPeek.self, from: notification.userInfo?.first?.value as! Data)
+            SharedSneakPeek.self, from: data)
         {
             let contentType =
                 decodedData.type == "brightness"
@@ -216,13 +226,8 @@ class AnotchupViewCoordinator: ObservableObject {
                 return
             }
         }
-        Task { @MainActor in
-            withAnimation(.smooth) {
-                self.sneakPeek.show = status
-                self.sneakPeek.type = type
-                self.sneakPeek.value = value
-                self.sneakPeek.icon = icon
-            }
+        withAnimation(.smooth) {
+            self.sneakPeek = .init(show: status, type: type, value: value, icon: icon)
         }
 
         if type == .mic {
@@ -231,22 +236,18 @@ class AnotchupViewCoordinator: ObservableObject {
     }
 
     private var sneakPeekDuration: TimeInterval = 1.5
-    private var sneakPeekTask: Task<Void, Never>?
-
-    // Helper function to manage sneakPeek timer using Swift Concurrency
     private func scheduleSneakPeekHide(after duration: TimeInterval) {
-        sneakPeekTask?.cancel()
+        previewLifetime.schedule(.hideCompactPreview, after: .seconds(duration), state: { [weak self] in
+            NotchInteractionState(isOpen: false, isPreviewVisible: self?.sneakPeek.show == true)
+        }, apply: { [weak self] _ in
+            self?.toggleSneakPeek(status: false, type: .music)
+        })
+    }
 
-        sneakPeekTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
-            guard let self = self, !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation {
-                    self.toggleSneakPeek(status: false, type: .music)
-                    self.sneakPeekDuration = 1.5
-                }
-            }
-        }
+    func cancelPreviews() {
+        previewLifetime.cancelAll()
+        sneakPeek.show = false
+        expandingView.show = false
     }
 
     @Published var sneakPeek: sneakPeek = .init() {
@@ -254,7 +255,7 @@ class AnotchupViewCoordinator: ObservableObject {
             if sneakPeek.show {
                 scheduleSneakPeekHide(after: sneakPeekDuration)
             } else {
-                sneakPeekTask?.cancel()
+                previewLifetime.cancel(.compactPreview)
             }
         }
     }
@@ -265,31 +266,23 @@ class AnotchupViewCoordinator: ObservableObject {
         value: CGFloat = 0,
         browser: BrowserType = .chromium
     ) {
-        Task { @MainActor in
-            withAnimation(.smooth) {
-                self.expandingView.show = status
-                self.expandingView.type = type
-                self.expandingView.value = value
-                self.expandingView.browser = browser
-            }
+        withAnimation(.smooth) {
+            self.expandingView = .init(show: status, type: type, value: value, browser: browser)
         }
     }
-
-    private var expandingViewTask: Task<Void, Never>?
 
     @Published var expandingView: ExpandedItem = .init() {
         didSet {
             if expandingView.show {
-                expandingViewTask?.cancel()
                 let duration: TimeInterval = (expandingView.type == .download ? 2 : 3)
-                let currentType = expandingView.type
-                expandingViewTask = Task { [weak self] in
-                    try? await Task.sleep(for: .seconds(duration))
-                    guard let self = self, !Task.isCancelled else { return }
-                    self.toggleExpandingView(status: false, type: currentType)
-                }
+                previewLifetime.schedule(.hideExpandedPreview, after: .seconds(duration), state: { [weak self] in
+                    NotchInteractionState(isOpen: false, isPreviewVisible: self?.expandingView.show == true)
+                }, apply: { [weak self] _ in
+                    guard let self else { return }
+                    self.toggleExpandingView(status: false, type: self.expandingView.type)
+                })
             } else {
-                expandingViewTask?.cancel()
+                previewLifetime.cancel(.expandedPreview)
             }
         }
     }

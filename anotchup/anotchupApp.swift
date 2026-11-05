@@ -80,6 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        coordinator.cancelPreviews()
         goalStore.stopMonitoringCountdown()
         goalStore.onCountdownFinished = nil
         vm.destroy()
@@ -102,6 +103,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func onScreenLocked(_ notification: Notification) {
         isScreenLocked = true
+        coordinator.cancelPreviews()
         vm.cancelDelayedInteractions()
         viewModels.values.forEach { $0.cancelDelayedInteractions() }
         if !Defaults[.showOnLockScreen] {
@@ -114,6 +116,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func onScreenUnlocked(_ notification: Notification) {
         isScreenLocked = false
+        coordinator.cancelPreviews()
         vm.cancelDelayedInteractions()
         viewModels.values.forEach { $0.cancelDelayedInteractions() }
         if !Defaults[.showOnLockScreen] {

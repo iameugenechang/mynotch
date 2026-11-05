@@ -16,7 +16,7 @@ public protocol NotchDelayScheduling {
 /// this owner. Effects may synchronously cancel or schedule further work.
 @MainActor
 public final class NotchInteractionLifetime {
-    public enum Lane: Hashable, Sendable { case hover, shortcut }
+    public enum Lane: Hashable, Sendable { case hover, shortcut, drag, resize, compactPreview, expandedPreview }
     public private(set) var isInvalidated = false
 
     private struct Pending {
@@ -38,7 +38,15 @@ public final class NotchInteractionLifetime {
                          state: @escaping @MainActor () -> NotchInteractionState,
                          apply: @escaping @MainActor (NotchDelayedActionSession.Effect) -> Void) {
         guard !isInvalidated else { return }
-        let lane: Lane = request == .shortcutClose ? .shortcut : .hover
+        let lane: Lane
+        switch request {
+        case .shortcutClose: lane = .shortcut
+        case .dragExit: lane = .drag
+        case .resize: lane = .resize
+        case .hideCompactPreview: lane = .compactPreview
+        case .hideExpandedPreview: lane = .expandedPreview
+        default: lane = .hover
+        }
         cancel(lane)
         var policy = NotchDelayedActionSession()
         let ticket = policy.schedule(request)

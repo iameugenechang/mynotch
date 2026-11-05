@@ -7,6 +7,7 @@
 
 import Foundation
 import Defaults
+import NotchShell
 
 public enum Style {
     case notch
@@ -24,11 +25,7 @@ public enum NotchState {
     case open
 }
 
-public enum NotchViews {
-    case home
-    case shelf
-    case goal
-}
+public typealias NotchViews = NotchTab
 
 enum SettingsEnum {
     case general
