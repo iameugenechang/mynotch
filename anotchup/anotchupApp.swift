@@ -52,6 +52,11 @@ struct AnotchupApp: App {
     }
 }
 
+@MainActor
+func makeAppCalendarManager() -> CalendarManager {
+    CalendarManager(service: CalendarService())
+}
+
 /// Native media construction and cross-feature effects stay at composition.
 @MainActor
 func makeAppMusicManager() -> MusicManager {

@@ -250,6 +250,10 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 
 `MediaFeature` now owns provider selection, playback snapshots, command/capability policy, and revision validation. App composition constructs native providers and wires preview effects. Native lyrics/artwork/color completion checks reject old revisions. Five component tests and the unsigned Debug build pass (`/tmp/anotchup-media-build.log`, 47 XCTest cases plus existing checks). Production transport conformance is not yet covered. See [the media contract](media-contract.md).
 
+## Calendar query slice
+
+`CalendarFeature` owns half-open local-day queries and stale-result rejection. The native facade receives its service from composition and reports failures separately from empty results. Four package cases and the unsigned build pass (`/tmp/anotchup-calendar-build.log`, 51 XCTest cases plus existing checks). Native EventKit adapter conformance remains open. See [the calendar contract](calendar-contract.md).
+
 ## Current compatibility exceptions
 
 - App bundle/preferences identity: `com.iameugenechang.mynotch`.

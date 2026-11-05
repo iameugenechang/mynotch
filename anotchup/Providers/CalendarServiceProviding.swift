@@ -8,16 +8,26 @@
 //
 
 import Foundation
+import CalendarFeature
 @preconcurrency import EventKit
 
+@MainActor
 protocol CalendarServiceProviding {
+    func authorizationStatus(for type: EKEntityType) -> EKAuthorizationStatus
+    func setReminderCompleted(reminderID: String, completed: Bool) async throws
     func requestAccess(to type: EKEntityType) async throws -> Bool
     func calendars() async -> [CalendarModel]
-    func events(from start: Date, to end: Date, calendars: [String]) async -> [EventModel]
+    func events(from start: Date, to end: Date, calendars: [String]) async throws -> [EventModel]
 }
 
 class CalendarService: CalendarServiceProviding {
-    private let store = EKEventStore()
+    private let store: EKEventStore
+
+    init(store: EKEventStore = EKEventStore()) { self.store = store }
+
+    func authorizationStatus(for type: EKEntityType) -> EKAuthorizationStatus {
+        EKEventStore.authorizationStatus(for: type)
+    }
     
     @MainActor
     func requestAccess(to type: EKEntityType) async throws -> Bool {
@@ -36,7 +46,7 @@ class CalendarService: CalendarServiceProviding {
     }
     
     private func hasAccess(to entityType: EKEntityType) -> Bool {
-        let status = EKEventStore.authorizationStatus(for: entityType)
+        let status = authorizationStatus(for: entityType)
         if #available(macOS 14.0, *) {
             return status == .fullAccess
         } else {
@@ -54,9 +64,13 @@ class CalendarService: CalendarServiceProviding {
         return calendars.map { CalendarModel(from: $0) }
     }
     
-    func events(from start: Date, to end: Date, calendars ids: [String]) async -> [EventModel] {
+    func events(from start: Date, to end: Date, calendars ids: [String]) async throws -> [EventModel] {
+        guard !ids.isEmpty else { return [] }
+        guard hasAccess(to: .event) || hasAccess(to: .reminder) else {
+            throw CalendarQueryError.accessDenied
+        }
         let allCalendars = await self.calendars()
-        let filteredCalendars = allCalendars.filter { ids.isEmpty || ids.contains($0.id) }
+        let filteredCalendars = allCalendars.filter { ids.contains($0.id) }
         let ekCalendars = filteredCalendars.compactMap { calendarModel in
             store.calendars(for: .event).first { $0.calendarIdentifier == calendarModel.id } ??
             store.calendars(for: .reminder).first { $0.calendarIdentifier == calendarModel.id }
@@ -67,34 +81,42 @@ class CalendarService: CalendarServiceProviding {
         // Fetch regular events
         if hasAccess(to: .event) {
             let eventCalendars = ekCalendars.filter { store.calendars(for: .event).contains($0) }
-            let predicate = store.predicateForEvents(withStart: start, end: end, calendars: eventCalendars)
-            let ekEvents = store.events(matching: predicate)
-            events.append(contentsOf: ekEvents.compactMap { EventModel(from: $0) })
+            if !eventCalendars.isEmpty {
+                let predicate = store.predicateForEvents(withStart: start, end: end, calendars: eventCalendars)
+                let ekEvents = store.events(matching: predicate)
+                events.append(contentsOf: ekEvents.compactMap { EventModel(from: $0) })
+            }
         }
         
         // Fetch reminders
         if hasAccess(to: .reminder) {
             let reminderCalendars = ekCalendars.filter { store.calendars(for: .reminder).contains($0) }
-            events.append(contentsOf: await fetchReminders(from: start, to: end, calendars: reminderCalendars))
+            if !reminderCalendars.isEmpty {
+                events.append(contentsOf: try await fetchReminders(from: start, to: end, calendars: reminderCalendars))
+            }
         }
         
         return events.sorted { $0.start < $1.start }
     }
     
-    private func fetchReminders(from start: Date, to end: Date, calendars: [EKCalendar]) async -> [EventModel] {
-        return await withCheckedContinuation { continuation in
+    private func fetchReminders(from start: Date, to end: Date, calendars: [EKCalendar]) async throws -> [EventModel] {
+        return try await withCheckedThrowingContinuation { continuation in
             // Create predicate for reminders with due dates in the specified range
             let predicate = store.predicateForReminders(in: calendars)
             
             store.fetchReminders(matching: predicate) { reminders in
                 
-                let filteredReminders = (reminders ?? []).filter { reminder in
+                guard let reminders else {
+                    continuation.resume(throwing: CalendarQueryError.unavailable)
+                    return
+                }
+                let filteredReminders = reminders.filter { reminder in
                     // Check if reminder has a due date within our range
                     guard let dueDate = reminder.dueDateComponents?.date else {
                         return false
                     }
                     
-                    return dueDate >= start && dueDate <= end
+                    return dueDate >= start && dueDate < end
                 }
                 
                 // Convert to EventModel
@@ -107,14 +129,13 @@ class CalendarService: CalendarServiceProviding {
         }
     }
     
-    func setReminderCompleted(reminderID: String, completed: Bool) async {
-        guard let reminder = store.calendarItem(withIdentifier: reminderID) as? EKReminder else { return }
-        reminder.isCompleted = completed
-        do {
-            try store.save(reminder, commit: true)
-        } catch {
-            print("Failed to update reminder completion: \(error)")
+    func setReminderCompleted(reminderID: String, completed: Bool) async throws {
+        guard hasAccess(to: .reminder) else { throw CalendarQueryError.accessDenied }
+        guard let reminder = store.calendarItem(withIdentifier: reminderID) as? EKReminder else {
+            throw CalendarQueryError.unavailable
         }
+        reminder.isCompleted = completed
+        try store.save(reminder, commit: true)
     }
 }
 

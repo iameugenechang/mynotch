@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A0D00E010000000000000013 /* CalendarFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000006 /* CalendarFeature */; };
 		A0D00E010000000000000012 /* MediaFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000005 /* MediaFeature */; };
 		A0D00E010000000000000010 /* ShelfStorageLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000010 /* ShelfStorageLocation.swift */; };
 		A0D00E010000000000000006 /* WorkingOn in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000001 /* WorkingOn */; };
@@ -354,6 +355,7 @@
 				A0D00E010000000000000008 /* NotchShell in Frameworks */,
 				A0D00E010000000000000011 /* NotchShellAdapters in Frameworks */,
 				A0D00E010000000000000012 /* MediaFeature in Frameworks */,
+				A0D00E010000000000000013 /* CalendarFeature in Frameworks */,
 				111BEA5F2ED07A340079DD4E /* MacroVisionKit in Frameworks */,
 				9A987A102C73CA8D005CA465 /* Collections in Frameworks */,
 				1194E8852EA57D23009C82D6 /* SkyLightWindow in Frameworks */,
@@ -826,6 +828,7 @@
 				A0D00E030000000000000003 /* NotchShell */,
 				A0D00E030000000000000004 /* NotchShellAdapters */,
 				A0D00E030000000000000005 /* MediaFeature */,
+				A0D00E030000000000000006 /* CalendarFeature */,
 				14D032192C68F32E0096E6A1 /* LaunchAtLogin */,
 				14D0321C2C68F3350096E6A1 /* Sparkle */,
 				B18654382C6F4990000B926A /* KeyboardShortcuts */,
@@ -1476,6 +1479,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A0D00E030000000000000006 /* CalendarFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CalendarFeature;
+		};
 		A0D00E030000000000000005 /* MediaFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MediaFeature;

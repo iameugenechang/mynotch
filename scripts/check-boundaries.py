@@ -8,7 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "Packages/AnotchupFeatures"
-LOGIC_TARGETS = ("WorkingOn", "NotchShell", "MediaFeature")
+LOGIC_TARGETS = ("WorkingOn", "NotchShell", "MediaFeature", "CalendarFeature")
 ALLOWED_IMPORTS = {"Foundation", "Combine"}
 FORBIDDEN = re.compile(
     r"\b(UserDefaults|Timer|RunLoop|UserDefaultsOneGoalPersistence|RunLoopCountdownScheduler|TaskNotchDelayScheduler)\b"
@@ -29,7 +29,8 @@ def violations(source):
 def graph_violations(manifest):
     targets = {target["name"]: target for target in manifest["targets"]}
     expected = {"WorkingOn": [], "WorkingOnAdapters": ["WorkingOn"],
-                "NotchShell": [], "NotchShellAdapters": ["NotchShell"], "MediaFeature": []}
+                "NotchShell": [], "NotchShellAdapters": ["NotchShell"], "MediaFeature": [],
+                "CalendarFeature": []}
     for name, dependencies in expected.items():
         target = targets.get(name)
         if target is None:
