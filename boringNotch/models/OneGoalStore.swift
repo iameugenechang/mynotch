@@ -3,26 +3,26 @@ import Foundation
 
 @MainActor
 final class OneGoalStore: ObservableObject {
-    static let shared = OneGoalStore()
-    // Keep the existing key when renaming the feature to "Working on".
-    static let storageKey = "oneGoal.current"
-
     @Published private(set) var goal: OneGoal
     var onCountdownFinished: (() -> Void)?
-    private let defaults: UserDefaults
+    private let persistence: any OneGoalPersistence
+    private let scheduler: any CountdownScheduling
     private let clock: () -> Date
-    private var completionTimer: Timer?
+    private var completionMonitor: AnyCancellable?
+    private var monitorGeneration = UUID()
     private var monitoringEnabled = false
 
-    init(defaults: UserDefaults = .standard, clock: @escaping () -> Date = { Date() }) {
-        self.defaults = defaults
+    init(persistence: any OneGoalPersistence, scheduler: any CountdownScheduling,
+         clock: @escaping () -> Date) {
+        self.persistence = persistence
+        self.scheduler = scheduler
         self.clock = clock
-        if let data = defaults.data(forKey: Self.storageKey),
+        if let data = persistence.load(),
            var saved = try? JSONDecoder().decode(OneGoal.self, from: data) {
             saved.text = OneGoal.normalized(saved.text)
             if saved.text.isEmpty {
                 saved = OneGoal()
-                defaults.removeObject(forKey: Self.storageKey)
+                persistence.clear()
             } else if let countdown = saved.countdown,
                       !countdown.duration.isFinite || countdown.duration <= 0 || countdown.duration > 86_400 || !countdown.deadline.timeIntervalSince1970.isFinite
                         || countdown.pausedRemaining.map({ !$0.isFinite || $0 <= 0 || $0 > countdown.duration }) == true {
@@ -31,7 +31,7 @@ final class OneGoalStore: ObservableObject {
             goal = saved
         } else {
             goal = OneGoal()
-            defaults.removeObject(forKey: Self.storageKey)
+            persistence.clear()
         }
     }
 
@@ -103,22 +103,30 @@ final class OneGoalStore: ObservableObject {
         }
     }
 
+    func stopMonitoringCountdown() {
+        monitoringEnabled = false
+        cancelCompletionMonitor()
+    }
+
+    private func cancelCompletionMonitor() {
+        monitorGeneration = UUID()
+        completionMonitor?.cancel()
+        completionMonitor = nil
+    }
+
     private func scheduleCompletionMonitor() {
-        completionTimer?.invalidate()
-        completionTimer = nil
+        cancelCompletionMonitor()
         guard monitoringEnabled, let countdown = goal.countdown,
               !countdown.isPaused, !countdown.isFinished else { return }
         if countdown.remaining(at: clock()) <= 0 {
             finishCountdown()
             return
         }
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshCountdown()
-            }
+        let generation = monitorGeneration
+        completionMonitor = scheduler.schedule(every: 1) { [weak self] in
+            guard let self, self.monitorGeneration == generation else { return }
+            self.refreshCountdown()
         }
-        completionTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     func refreshCountdown() {
@@ -138,10 +146,6 @@ final class OneGoalStore: ObservableObject {
         onCountdownFinished?()
     }
 
-    deinit {
-        completionTimer?.invalidate()
-    }
-
     func clearCountdown() {
         var updated = goal
         updated.countdown = nil
@@ -155,9 +159,9 @@ final class OneGoalStore: ObservableObject {
     private func update(_ updated: OneGoal) {
         guard updated != goal else { return }
         if updated.text.isEmpty {
-            defaults.removeObject(forKey: Self.storageKey)
+            persistence.clear()
         } else if let data = try? JSONEncoder().encode(updated) {
-            defaults.set(data, forKey: Self.storageKey)
+            persistence.save(data)
         }
         goal = updated
         scheduleCompletionMonitor()

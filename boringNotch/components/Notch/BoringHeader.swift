@@ -112,5 +112,7 @@ struct BoringHeader: View {
 }
 
 #Preview {
-    BoringHeader().environmentObject(BoringViewModel())
+    BoringHeader()
+        .environmentObject(BoringViewModel())
+        .environmentObject(OneGoalStore(defaults: UserDefaults(suiteName: "anotchup.preview.working-on")!))
 }

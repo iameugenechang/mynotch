@@ -18,7 +18,7 @@ Expiry leaves the text in place and marks the countdown Finished. Settings > Wor
 - The countdown can be an underline at the top or bottom of the caption, or a ring around the visualizer. The underline remembers the collapsed inner width through expansion and previews. The ring stays 20 by 20 points with a centered 10 by 10 point spectrum.
 - Text, underline, and ring use the existing Player tinting setting. There is no separate caption color setting.
 - Settings > Media > Keep visible while paused is enabled by default. It keeps real track metadata visible, not the startup placeholder. Turning it off restores the inactivity timeout.
-- Right-click offers Working on, countdown controls when applicable, Settings, and Quit mynotch.
+- Right-click offers Working on, countdown controls when applicable, Settings, and Quit anotchup.
 - Display selection, all-displays mode, and existing media/fullscreen controls remain in place. All displays share the same saved text and countdown.
 
 Physical readability still needs a person looking at the display. Offscreen geometry cannot tell whether a camera cutout hides text.
@@ -28,37 +28,39 @@ Physical readability still needs a person looking at the display. Offscreen geom
 The feature was previously called One Goal. Internal `OneGoal` type names, source/test paths, and preference keys remain unchanged to keep saved data and settings compatible. Renaming the feature does not reset the text, timer, or appearance settings.
 
 - `models/OneGoal.swift` contains the Codable snapshot, duration parser, sound choices, and deterministic caption/layout rules.
-- `models/OneGoalStore.swift` persists one snapshot under the existing `oneGoal.current` key. Emptying the text or choosing Done removes the key. Optional pause and handled-completion fields keep older snapshots readable.
+- `models/OneGoalStore.swift` owns saved-state transitions through injected persistence, scheduling, and time. `helpers/OneGoalAdapters.swift` supplies isolated-testable UserDefaults storage under the existing `oneGoal.current` key and the real run-loop scheduler. Emptying the text or choosing Done removes the key. Optional pause and handled-completion fields keep older snapshots readable.
 - Running countdowns use a wall-clock deadline, not a decrementing counter, so sleep time is included. Paused countdowns retain their remaining duration across relaunches. Tests inject a clock without changing production timekeeping.
-- The store owns one completion monitor in the main run loop's common modes. It saves the handled flag before invoking the sound callback and stops monitoring paused, finished, or removed timers.
+- The app delegate owns one store shared across display view trees, starts monitoring at launch, and stops it at termination. The store retains a scheduler token, cancels it for paused/finished/removed timers, and rejects stale callbacks. The real adapter uses the main run loop's common modes. Completion saves the handled flag before invoking the sound callback, without promising crash-safe exactly-once audio.
 - `components/OneGoal/OneGoalViews.swift` contains the caption, timer styles, settings, and editor. `ContentView.swift` owns the shared clipping shape and stable timer-width tracking.
 - `components/Music/MusicVisualizer.swift` lays out its actual AppKit layers within their current bounds. `models/PlaybackState.swift` defines the tested paused-media visibility policy.
 - Only an explicitly opened Working on editor permits its panel to become key. Hover closure stays blocked while editing; explicit dismissal releases that protection.
-- The fork uses `com.iameugenechang.mynotch` and its own helper identifier. The upstream updater does not start.
+- The app is named anotchup. It retains `com.iameugenechang.mynotch` and its existing helper identifier for compatibility. The upstream updater does not start. See the [architecture and implementation plan](architecture-plan.md) for the staged source and identity migration.
 
 ## Background checks
 
 Run:
 
 ```bash
-scripts/test-one-goal.sh
+scripts/verify.sh
 ```
 
-The script compiles production sources directly with the macOS SDK. It needs no third-party test framework and does not build or launch the app.
+The command runs boundary checks, compiles production test sources directly with the macOS SDK, and validates the Xcode project. It needs no third-party test framework and does not build or launch the app by default. `scripts/test-one-goal.sh` remains the focused test runner.
 
-`Tests/OneGoalTests.swift` checks normalization, Unicode storage, corrupt/legacy snapshots, rename compatibility, duration bounds and parsing, countdown fractions, pause/resume/restart, clearing/completion, sleep/relaunch behavior, exactly-once completion, and the real Foundation completion scheduler. Layout checks cover collapsed, expanded, and preview footer geometry across font heights and offsets. Media checks cover the paused-player visibility policy.
+`Tests/OneGoalTests.swift` checks normalization, Unicode storage, corrupt/legacy snapshots, rename compatibility, duration bounds and parsing, countdown fractions, pause/resume/restart, clearing/completion, sleep/relaunch behavior, single completion callback delivery, and the real Foundation completion scheduler. Layout checks cover collapsed, expanded, and preview footer geometry across font heights and offsets. Media checks cover the paused-player visibility policy.
+
+`Tests/OneGoalContractTests.swift` runs shared persistence and scheduling cases against real adapters and test substitutes. It also checks shared subscribers, completion ordering, stale callbacks, reconstruction, and teardown. See [Working on component contracts](working-on-contract.md) for guarantees and limits.
 
 `Tests/OneGoalRendererTests.swift` creates offscreen AppKit spectrum layers without windows or activation. It checks centering, clipping, resizing, paused bars, native font metrics, and sound-file loading. It never plays audio.
 
-Both suites leave the running app and its preferences alone. They do not move the pointer, synthesize keys, change app focus, capture the screen, hide applications, or request Accessibility access. The previous interactive UI smoke script has been removed rather than run during normal work.
+All suites leave the running app and its preferences alone. They do not move the pointer, synthesize keys, change app focus, capture the screen, hide applications, or request Accessibility access. The previous interactive UI smoke script has been removed rather than run during normal work.
 
-GitHub Actions runs these same checks on macOS. To check app compilation separately without opening it:
+GitHub Actions runs `scripts/verify.sh` on macOS. To also check app compilation locally without opening it:
 
 ```bash
-xcodebuild -project boringNotch.xcodeproj -scheme boringNotch \
-  -configuration Debug -destination 'platform=macOS' \
-  -derivedDataPath /tmp/mynotch-build CODE_SIGNING_ALLOWED=NO build
+scripts/verify.sh --build
 ```
+
+The unsigned Debug build goes to `/tmp/anotchup-build` by default. Set `ANOTCHUP_BUILD_DIR` to choose another directory. Verification used Xcode 27.2 (27B52) and Python 3; other Xcode versions have not been verified.
 
 ## Manual acceptance checks
 

@@ -1,18 +1,28 @@
-name: Working on checks
+name: Component and contract checks
 
 on:
   push:
     branches: [main, 'feat/**']
     paths:
       - 'boringNotch/**'
+      - 'boringNotch.xcodeproj/**'
+      - 'BoringNotchXPCHelper/**'
+      - 'Packages/**'
+      - 'Package.swift'
+      - 'Package.resolved'
       - 'Tests/**'
-      - 'scripts/test-one-goal.sh'
+      - 'scripts/**'
       - '.github/workflows/one-goal-tests.yml'
   pull_request:
     paths:
       - 'boringNotch/**'
+      - 'boringNotch.xcodeproj/**'
+      - 'BoringNotchXPCHelper/**'
+      - 'Packages/**'
+      - 'Package.swift'
+      - 'Package.resolved'
       - 'Tests/**'
-      - 'scripts/test-one-goal.sh'
+      - 'scripts/**'
       - '.github/workflows/one-goal-tests.yml'
   workflow_dispatch:
 
@@ -20,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: one-goal-${{ github.ref }}
+  group: component-checks-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,5 +39,5 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Model, layout, and offscreen renderer checks
-        run: scripts/test-one-goal.sh
+      - name: Component, adapter contract, boundary, and offscreen renderer checks
+        run: scripts/verify.sh

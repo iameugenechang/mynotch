@@ -23,7 +23,7 @@ struct ContentView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
-    @ObservedObject private var goalStore = OneGoalStore.shared
+    @EnvironmentObject private var goalStore: OneGoalStore
     @Default(.oneGoalFontSize) private var oneGoalFontSize
     @Default(.oneGoalTextPadding) private var oneGoalTextPadding
     @Default(.oneGoalTimerStyle) private var oneGoalTimerStyle
@@ -614,7 +614,7 @@ struct ContentView: View {
         }
         .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
         Divider()
-        Button("Quit mynotch") {
+        Button("Quit anotchup") {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
@@ -796,5 +796,6 @@ struct GeneralDropTargetDelegate: DropDelegate {
     vm.open()
     return ContentView()
         .environmentObject(vm)
+        .environmentObject(OneGoalStore(defaults: UserDefaults(suiteName: "anotchup.preview.working-on")!))
         .frame(width: vm.notchSize.width, height: vm.notchSize.height)
 }

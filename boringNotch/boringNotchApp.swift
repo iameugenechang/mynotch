@@ -24,27 +24,21 @@ struct DynamicNotchApp: App {
         updaterController = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
 
-        // One completion monitor for the entire app, not one per display/view.
-        OneGoalStore.shared.onCountdownFinished = {
-            OneGoalSoundPlayer.shared.playSelectedSound()
-        }
-        OneGoalStore.shared.startMonitoringCountdown()
-
         // Initialize the settings window controller with the updater controller
         SettingsWindowController.shared.setUpdaterController(updaterController)
     }
 
     var body: some Scene {
-        MenuBarExtra("mynotch", systemImage: "sparkle", isInserted: $showMenuBarIcon) {
+        MenuBarExtra("anotchup", systemImage: "sparkle", isInserted: $showMenuBarIcon) {
             Button("Settings") {
                 DispatchQueue.main.async {
                     SettingsWindowController.shared.showWindow()
                 }
             }
             .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
-            Link("mynotch on GitHub", destination: URL(string: "https://github.com/iameugenechang/mynotch")!)
+            Link("anotchup on GitHub", destination: URL(string: "https://github.com/iameugenechang/mynotch")!)
             Divider()
-            Button("Restart mynotch") {
+            Button("Restart anotchup") {
                 ApplicationRelauncher.restart()
             }
             Button("Quit", role: .destructive) {
@@ -56,6 +50,11 @@ struct DynamicNotchApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    // App-owned feature instance, shared by every display's view tree.
+    private let goalStore = OneGoalStore(
+        persistence: UserDefaultsOneGoalPersistence(defaults: .standard),
+        scheduler: RunLoopCountdownScheduler(), clock: { Date() })
+
     var statusItem: NSStatusItem?
     var windows: [String: NSWindow] = [:] // UUID -> NSWindow
     var viewModels: [String: BoringViewModel] = [:] // UUID -> BoringViewModel
@@ -79,6 +78,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        goalStore.stopMonitoringCountdown()
+        goalStore.onCountdownFinished = nil
         NotificationCenter.default.removeObserver(self)
         if let observer = screenLockedObserver {
             DistributedNotificationCenter.default().removeObserver(observer)
@@ -254,6 +255,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = NSHostingView(
             rootView: ContentView()
                 .environmentObject(viewModel)
+                .environmentObject(goalStore)
         )
 
         window.orderFrontRegardless()
@@ -287,6 +289,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        goalStore.onCountdownFinished = {
+            OneGoalSoundPlayer.shared.playSelectedSound()
+        }
+        goalStore.startMonitoringCountdown()
 
         NotificationCenter.default.addObserver(
             self,

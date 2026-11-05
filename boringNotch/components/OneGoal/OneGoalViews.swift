@@ -6,7 +6,7 @@ private func oneGoalPlayerTint(_ color: NSColor, enabled: Bool) -> Color {
 }
 
 struct OneGoalLabel: View {
-    @ObservedObject private var store = OneGoalStore.shared
+    @EnvironmentObject private var store: OneGoalStore
     @ObservedObject private var musicManager = MusicManager.shared
     @Default(.playerColorTinting) private var playerColorTinting
     @Default(.oneGoalFontSize) private var fontSize
@@ -174,7 +174,7 @@ struct OneGoalAppearanceSettings: View {
 
 struct OneGoalView: View {
     @EnvironmentObject private var vm: BoringViewModel
-    @ObservedObject private var store = OneGoalStore.shared
+    @EnvironmentObject private var store: OneGoalStore
     @ObservedObject private var musicManager = MusicManager.shared
     @Default(.playerColorTinting) private var playerColorTinting
     @State private var draft = ""
@@ -506,7 +506,7 @@ struct OneGoalView: View {
 }
 
 struct OneGoalCountdownRing: View {
-    @ObservedObject private var store = OneGoalStore.shared
+    @EnvironmentObject private var store: OneGoalStore
     @ObservedObject private var musicManager = MusicManager.shared
     @Default(.playerColorTinting) private var playerColorTinting
     var action: () -> Void
@@ -538,7 +538,7 @@ struct OneGoalCountdownRing: View {
 
 /// Keep the same small visualizer and ring available in the expanded header.
 struct OneGoalRingVisualizer: View {
-    @ObservedObject private var store = OneGoalStore.shared
+    @EnvironmentObject private var store: OneGoalStore
     @ObservedObject private var musicManager = MusicManager.shared
     @Default(.oneGoalTimerStyle) private var timerStyle
     @Default(.coloredSpectrogram) private var coloredSpectrogram

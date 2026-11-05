@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A0D00E010000000000000004 /* OneGoalDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000004 /* OneGoalDependencies.swift */; };
+		A0D00E010000000000000005 /* OneGoalAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000005 /* OneGoalAdapters.swift */; };
 		A0D00E010000000000000001 /* OneGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000001 /* OneGoal.swift */; };
 		A0D00E010000000000000002 /* OneGoalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000002 /* OneGoalStore.swift */; };
 		A0D00E010000000000000003 /* OneGoalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000003 /* OneGoalViews.swift */; };
@@ -184,6 +186,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A0D00E020000000000000004 /* OneGoalDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoalDependencies.swift; sourceTree = "<group>"; };
+		A0D00E020000000000000005 /* OneGoalAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoalAdapters.swift; sourceTree = "<group>"; };
 		A0D00E020000000000000001 /* OneGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoal.swift; sourceTree = "<group>"; };
 		A0D00E020000000000000002 /* OneGoalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoalStore.swift; sourceTree = "<group>"; };
 		A0D00E020000000000000003 /* OneGoalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoal/OneGoalViews.swift; sourceTree = "<group>"; };
@@ -262,7 +266,7 @@
 		14C08BB52C8DE42D000F8AA0 /* CalendarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarManager.swift; sourceTree = "<group>"; };
 		14C08BB82C8DE4B1000F8AA0 /* BoringCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoringCalendar.swift; sourceTree = "<group>"; };
 		14C08BC02C8E03AD000F8AA0 /* NSImage+Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "NSImage+Extensions.swift"; sourceTree = "<group>"; };
-		14CEF4122C5CAED300855D72 /* Boring Notch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mynotch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		14CEF4122C5CAED300855D72 /* Boring Notch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = anotchup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		14CEF4152C5CAED300855D72 /* boringNotchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = boringNotchApp.swift; sourceTree = "<group>"; };
 		14CEF4172C5CAED300855D72 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		14CEF4192C5CAED400855D72 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -465,6 +469,7 @@
 				11A45C782E34E63100CEB175 /* MediaChecker.swift */,
 				1153BD972D9881F900979FB0 /* AppleScriptHelper.swift */,
 				14288DD62C6E015000B9F80C /* AudioPlayer.swift */,
+				A0D00E020000000000000005 /* OneGoalAdapters.swift */,
 				5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */,
 				14288E0B2C6F8EC000B9F80C /* AppIcons.swift */,
 			);
@@ -635,6 +640,7 @@
 			children = (
 				A0D00E020000000000000001 /* OneGoal.swift */,
 				A0D00E020000000000000002 /* OneGoalStore.swift */,
+				A0D00E020000000000000004 /* OneGoalDependencies.swift */,
 				11F748812ECB07A400F841DB /* MusicControlButton.swift */,
 				118D1FD02E98FF5F00A2FF63 /* SharingStateManager.swift */,
 				1163988E2DF5CC870052E6AF /* CalendarModel.swift */,
@@ -916,6 +922,8 @@
 			files = (
 				A0D00E010000000000000001 /* OneGoal.swift in Sources */,
 				A0D00E010000000000000002 /* OneGoalStore.swift in Sources */,
+				A0D00E010000000000000004 /* OneGoalDependencies.swift in Sources */,
+				A0D00E010000000000000005 /* OneGoalAdapters.swift in Sources */,
 				A0D00E010000000000000003 /* OneGoalViews.swift in Sources */,
 				115C12EC2ED3D003009754CA /* OpenNotchHUD.swift in Sources */,
 				14C08BB92C8DE4B1000F8AA0 /* BoringCalendar.swift in Sources */,
@@ -1246,8 +1254,8 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = boringNotch/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = mynotch;
-				INFOPLIST_KEY_CFBundleName = mynotch;
+				INFOPLIST_KEY_CFBundleDisplayName = anotchup;
+				INFOPLIST_KEY_CFBundleName = anotchup;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSBackgroundOnly = NO;
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -1263,7 +1271,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 2.7.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.mynotch;
-				PRODUCT_NAME = mynotch;
+				PRODUCT_NAME = anotchup;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -1300,8 +1308,8 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = boringNotch/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = mynotch;
-				INFOPLIST_KEY_CFBundleName = mynotch;
+				INFOPLIST_KEY_CFBundleDisplayName = anotchup;
+				INFOPLIST_KEY_CFBundleName = anotchup;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSBackgroundOnly = NO;
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -1317,7 +1325,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 2.7.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.iameugenechang.mynotch;
-				PRODUCT_NAME = mynotch;
+				PRODUCT_NAME = anotchup;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;

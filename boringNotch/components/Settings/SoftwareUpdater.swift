@@ -63,7 +63,7 @@ struct UpdaterSettingsView: View {
                 Text("Software updates")
             }
         } footer: {
-            Text("Updates are disabled for this fork so upstream releases cannot replace mynotch.")
+            Text("Updates are disabled for this fork so upstream releases cannot replace anotchup.")
         }
         .disabled(Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") == nil)
     }
