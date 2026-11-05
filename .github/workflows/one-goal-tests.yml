@@ -4,26 +4,32 @@ on:
   push:
     branches: [main, 'feat/**']
     paths:
-      - 'boringNotch/**'
-      - 'boringNotch.xcodeproj/**'
-      - 'BoringNotchXPCHelper/**'
+      - 'anotchup/**'
+      - 'anotchup.xcodeproj/**'
+      - 'AnotchupXPCHelper/**'
       - 'Packages/**'
       - 'Package.swift'
       - 'Package.resolved'
       - 'Tests/**'
       - 'scripts/**'
-      - '.github/workflows/one-goal-tests.yml'
+      - '.github/**'
+      - '*.md'
+      - 'docs/**'
+      - 'crowdin.yml'
   pull_request:
     paths:
-      - 'boringNotch/**'
-      - 'boringNotch.xcodeproj/**'
-      - 'BoringNotchXPCHelper/**'
+      - 'anotchup/**'
+      - 'anotchup.xcodeproj/**'
+      - 'AnotchupXPCHelper/**'
       - 'Packages/**'
       - 'Package.swift'
       - 'Package.resolved'
       - 'Tests/**'
       - 'scripts/**'
-      - '.github/workflows/one-goal-tests.yml'
+      - '.github/**'
+      - '*.md'
+      - 'docs/**'
+      - 'crowdin.yml'
   workflow_dispatch:
 
 permissions:

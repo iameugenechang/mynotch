@@ -8,11 +8,13 @@ if [[ $# -gt 1 || ($# -eq 1 && "$1" != "--build") ]]; then
 fi
 python3 Tests/test_boundaries.py
 python3 scripts/check-boundaries.py
+scripts/test-identity.sh
+python3 -m unittest discover -s .github/scripts/tests
 scripts/test-one-goal.sh
-plutil -lint boringNotch.xcodeproj/project.pbxproj
+plutil -lint anotchup.xcodeproj/project.pbxproj
 git diff --check
 if [[ "${1:-}" == "--build" ]]; then
-  xcodebuild -project boringNotch.xcodeproj -scheme boringNotch \
+  xcodebuild -project anotchup.xcodeproj -scheme anotchup \
     -configuration Debug -destination 'platform=macOS' \
     -derivedDataPath "${ANOTCHUP_BUILD_DIR:-/tmp/anotchup-build}" \
     CODE_SIGNING_ALLOWED=NO build

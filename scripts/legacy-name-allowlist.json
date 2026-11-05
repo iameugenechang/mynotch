@@ -1,0 +1,10 @@
+{
+  "README.md": ["boring.notch"],
+  "docs/architecture-plan.md": ["boring.notch"],
+  "docs/rename-contract.md": ["boringNotch/Shelf", "boring.notch", "/auth/boringNotch"],
+  "anotchup/components/Onboarding/WelcomeView.swift": ["boring.notch"],
+  "anotchup/components/Settings/SettingsView.swift": ["boring.notch"],
+  "anotchup/components/Shelf/Services/ShelfStorageLocation.swift": ["boringNotch/Shelf"],
+  "anotchup/MediaControllers/YouTube Music Controller/YouTubeMusicNetworking.swift": ["/auth/boringNotch"],
+  ".github/scripts/tests/test_workflow_smoke.py": ["https://github.com/TheBoredTeam/boring.notch/releases/download/${TAG}/"]
+}

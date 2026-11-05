@@ -8,6 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "Packages/AnotchupFeatures"
+LOGIC_TARGETS = ("WorkingOn", "NotchShell")
 ALLOWED_IMPORTS = {"Foundation", "Combine"}
 FORBIDDEN = re.compile(
     r"\b(UserDefaults|Timer|RunLoop|UserDefaultsOneGoalPersistence|RunLoopCountdownScheduler)\b"
@@ -20,14 +21,14 @@ def violations(source):
         code = line.split("//", 1)[0]
         imported = re.search(r"\bimport\s+(\w+)", code)
         if imported and imported.group(1) not in ALLOWED_IMPORTS:
-            yield number, "platform/UI/adapter import in Working on logic"
+            yield number, "platform/UI/other-component import in isolated logic"
         if FORBIDDEN.search(code):
-            yield number, "concrete adapter or singleton access in Working on logic"
+            yield number, "concrete adapter or singleton access in isolated logic"
 
 
 def graph_violations(manifest):
     targets = {target["name"]: target for target in manifest["targets"]}
-    expected = {"WorkingOn": [], "WorkingOnAdapters": ["WorkingOn"]}
+    expected = {"WorkingOn": [], "WorkingOnAdapters": ["WorkingOn"], "NotchShell": []}
     for name, dependencies in expected.items():
         target = targets.get(name)
         if target is None:
@@ -48,23 +49,24 @@ def main():
         ["xcrun", "swift", "package", "--package-path", str(PACKAGE), "dump-package"], text=True
     ))
     errors.extend(f"Packages/AnotchupFeatures/Package.swift: {error}" for error in graph_violations(manifest))
-    sources = list((PACKAGE / "Sources/WorkingOn").rglob("*.swift"))
-    if not sources:
-        errors.append("WorkingOn has no Swift sources")
-    for path in sources:
-        for number, message in violations(path.read_text()):
-            errors.append(f"{path.relative_to(ROOT)}:{number}: {message}")
-    for path in (ROOT / "boringNotch").rglob("*.swift"):
+    for target in LOGIC_TARGETS:
+        sources = list((PACKAGE / "Sources" / target).rglob("*.swift"))
+        if not sources:
+            errors.append(f"{target} has no Swift sources")
+        for path in sources:
+            for number, message in violations(path.read_text()):
+                errors.append(f"{path.relative_to(ROOT)}:{number}: {message}")
+    for path in (ROOT / "anotchup").rglob("*.swift"):
         for number, line in enumerate(path.read_text().splitlines(), 1):
             code = line.split("//", 1)[0]
             if re.search(r"\bOneGoalStore\s*\.\s*shared\b", code):
                 errors.append(f"{path.relative_to(ROOT)}:{number}: inject the app-owned Working on store")
-            if re.search(r"\b(class|struct|enum|protocol)\s+(OneGoal|OneGoalStore|OneGoalEditorSession|OneGoalPersistence|CountdownScheduling)\b", code):
+            if re.search(r"\b(class|struct|enum|protocol)\s+(OneGoal|OneGoalStore|OneGoalEditorSession|OneGoalPersistence|CountdownScheduling|NotchInteractionState|NotchDelayedActionSession)\b", code):
                 errors.append(f"{path.relative_to(ROOT)}:{number}: use the package implementation, not an app copy")
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("Working on package and source boundary checks passed")
+    print("Working on and notch shell package/source boundary checks passed")
     return 0
 
 

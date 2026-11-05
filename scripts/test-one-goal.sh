@@ -7,14 +7,14 @@ trap 'rm -rf "$build_dir"' EXIT
 xcrun swift test --package-path Packages/AnotchupFeatures --scratch-path "$build_dir/package"
 target="$(uname -m)-apple-macos14.0"
 xcrun swiftc -parse-as-library -target "$target" \
-  boringNotch/models/OneGoalPresentation.swift \
-  boringNotch/models/PlaybackState.swift \
+  anotchup/models/OneGoalPresentation.swift \
+  anotchup/models/PlaybackState.swift \
   Tests/OneGoalPresentationTests.swift \
   -o "$build_dir/OneGoalPresentationTests"
 "$build_dir/OneGoalPresentationTests"
 xcrun swiftc -parse-as-library -target "$target" \
-  boringNotch/models/OneGoalPresentation.swift \
-  boringNotch/components/Music/MusicVisualizer.swift \
+  anotchup/models/OneGoalPresentation.swift \
+  anotchup/components/Music/MusicVisualizer.swift \
   Tests/OneGoalRendererTests.swift \
   -o "$build_dir/OneGoalRendererTests"
 "$build_dir/OneGoalRendererTests"

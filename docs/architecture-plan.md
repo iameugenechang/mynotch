@@ -17,7 +17,7 @@ This document is the implementation backlog. Only checked items are complete. Ea
 - Prefer value types for snapshots, commands, and events. UI-facing mutable state is main-actor isolated; asynchronous adapters document delivery and cancellation.
 - Preserve current multi-display behavior initially, including shared tab selection. Separate that shared navigation from display-local hover, geometry, expansion, and editor focus ownership.
 - Use a local Swift package with target-level dependency rules once the first feature is extracted. Keep AppKit/SwiftUI rendering and platform adapters in separate targets from feature logic. Avoid a package per feature and a large catch-all core module.
-- Mechanical naming changes, behavioral refactors, and persisted-data migrations are separate patches.
+- Keep naming, behavior, and data migration changes separately reviewable. The coordinated rename below includes the Shelf path compatibility code and is verified before the next shell change.
 
 ## Intended boundaries
 
@@ -74,8 +74,8 @@ Initial contract cases:
 
 - [x] Record background test results and an unsigned app build after the initial branding patch. A separate pre-change build was not run; these results are the baseline for subsequent extraction work.
 - [x] Introduce `anotchup` in product metadata, menus, welcome/settings text, and project documentation. Remove upstream promotional claims while retaining attribution.
-- [ ] Inventory remaining branding in localization, images, workflows, helper names, file paths, and persisted identifiers. Classify each as rename, attribution, or compatibility exception.
-- [ ] Audit inherited release, update, website, and translation automation. Disable or isolate upstream publishing behavior before using it for this fork. Do not publish or provision credentials during this work.
+- [x] Inventory remaining branding in localization, images, workflows, helper names, file paths, and persisted identifiers. Classify each as rename, attribution, or compatibility exception.
+- [x] Audit inherited release, update, website, and translation automation. Disable or isolate upstream publishing behavior before using it for this fork. Do not publish or provision credentials during this work.
 
 Gate: existing tests pass, generated app metadata says `anotchup`, settings and goal data keep the same identifiers, and no upstream updater is enabled. Report remaining names rather than claim the entire rename is complete.
 
@@ -90,12 +90,12 @@ Gate: a fresh checkout can run the checks without private credentials, app activ
 
 ### 2. Perform mechanical source and project renames
 
-- [ ] Rename the Xcode project, scheme, source root, entitlements paths, and build scripts to `anotchup` in one coordinated change. Update CI and documentation references.
-- [ ] Use responsibility names for internal types: `NotchSession`, `NotchPanel`, and `AppComposition` where those responsibilities are established. Avoid replacing every `Boring` prefix with a new brand prefix.
-- [ ] Rename helper product/types and both ends of the XPC protocol together; verify embedding and service resolution. Retain its old service identifier until the identity migration step if needed.
-- [ ] Maintain a checked allowlist for legacy identifiers and attribution instead of blindly replacing strings or editing vendored binaries.
+- [x] Rename the Xcode project, scheme, source root, entitlements paths, and build scripts to `anotchup` in one coordinated change. Update CI and documentation references.
+- [x] Rename app-owned branded types to `Anotchup`, as requested. Extracted components retain responsibility names. Further responsibility naming follows actual ownership extraction rather than implying it is already done.
+- [x] Rename helper product/types and both ends of the XPC protocol together; verify embedding and matching service identifiers. Signed runtime service resolution remains untested.
+- [x] Maintain a checked allowlist for legacy identifiers and attribution instead of blindly replacing strings or editing vendored binaries.
 
-Gate: tests and unsigned app build pass; project/scheme enumeration, helper embedding, and client/service identifiers agree. No state schema change in this step.
+Gate: tests and unsigned app build pass; project/scheme enumeration, helper embedding, and client/service identifiers agree. No state schema change. The Shelf directory rename uses a tested compatibility copy, documented in [the rename contract](rename-contract.md).
 
 ### 3. Extract Working on as the reference component
 
@@ -110,11 +110,14 @@ Gate: the app uses the extracted implementation, not a parallel copy. Existing b
 
 ### 4. Extract shell behavior and display composition
 
-- [ ] Characterize hover, drag, expansion, preview dismissal, tab defaults, and editor protection before moving them.
-- [ ] Extract deterministic shell transitions and layout decisions from `ContentView` and `BoringViewModel`.
-- [ ] Introduce explicit display-session and editor-focus ownership. Preserve shared tab semantics.
+- [x] Characterize hover-open/exit, battery/sharing close guards, and editor close protection.
+- [x] Extract hover decisions and pending-ticket ownership into `NotchShell`, with one session per display view model.
+- [ ] Characterize and extract drag, remaining expansion/layout, preview dismissal, and tab-default decisions.
+- [ ] Complete display-session and editor-focus ownership. Preserve shared tab semantics.
 - [ ] Move window creation, permission prompts, and cross-feature refresh wiring out of shell logic.
-- [ ] Test focus transfer, display removal, stale delayed-close callbacks, lock/unlock transitions, and teardown without interacting with the real desktop.
+- [x] Test stale/replaced/canceled hover tickets, recreation, and independent sessions without native services.
+- [x] Move shortcut auto-close under each display owner and test its policy, stale tickets, independent deadlines, and separation from hover cancellation.
+- [ ] Test host lifecycle wiring, focus transfer, actual display removal, native shortcut task delivery, lock/unlock, and remaining teardown paths without interacting with the real desktop.
 
 Gate: shell tests require no camera/media service construction. One display's local events cannot corrupt another display's local state. Physical focus and camera-cutout readability remain manual acceptance items.
 
@@ -168,15 +171,15 @@ The initial patch changes product metadata in both Debug and Release, visible Sw
 Verification on Xcode 27.2 (27B52):
 
 - `scripts/test-one-goal.sh`: 328 model/layout checks and 104 offscreen renderer checks passed, without audio.
-- `xcodebuild -project boringNotch.xcodeproj -scheme boringNotch -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/anotchup-build CODE_SIGNING_ALLOWED=NO build`: passed. Release was not built.
+- `xcodebuild -project anotchup.xcodeproj -scheme anotchup -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/anotchup-build CODE_SIGNING_ALLOWED=NO build`: passed. Release was not built.
 - Generated app metadata: name, display name, and executable are `anotchup`; app and embedded helper identifiers retain their compatibility values.
-- `plutil -lint boringNotch.xcodeproj/project.pbxproj` and `git diff --check`: passed.
+- `plutil -lint anotchup.xcodeproj/project.pbxproj` and `git diff --check`: passed.
 - Build warnings include Sendable diagnostics in unchanged code and a MediaRemoteAdapter macOS 15.0 binary linked into a macOS 14.0 target. Build success does not establish macOS 14 runtime compatibility; investigate that mismatch before claiming support.
 - No app launch, installation, permission prompt, interactive UI validation, or release publication was performed.
 
 ## First architecture slice
 
-On the request to start rearchitecture, step 1 and the dependency/lifecycle portion of step 3 were done before the mechanical rename. This keeps naming changes out of the component diff. Steps 0 and 2 remain unfinished.
+On the request to start rearchitecture, step 1 and the dependency/lifecycle portion of step 3 were done before the mechanical rename. This kept naming changes out of that component diff. Steps 0 and 2 were unfinished at that point.
 
 - Added `scripts/verify.sh` for boundary checks, existing behavior/renderer tests, adapter contracts, project validation, and whitespace checks. `--build` also compiles the unsigned app. CI uses the same default command; the unsigned app build was verified locally, not added to CI.
 - Removed `OneGoalStore.shared`. The app delegate owns one store and injects it into each display tree. Startup/shutdown own monitoring and sound wiring.
@@ -190,7 +193,7 @@ Toolchain used: macOS with full Xcode 27.2 (27B52), its selected Swift/macOS SDK
 
 - Added `Packages/AnotchupFeatures` with `WorkingOn`, `WorkingOnAdapters`, and `WorkingOnTests` targets. The logic target imports only Foundation and Combine. Adapters depend on logic, not the reverse. The package has no external dependencies and uses Swift tools 5.9 with a macOS 14 minimum.
 - Moved snapshot, duration parser, state transitions, contracts, and adapters into the package. The app links both library products instead of compiling duplicate source files. Public initializers preserve the existing snapshot defaults and persisted fields. No data or app identifier changed.
-- Kept native layout and sound choices in `boringNotch/models/OneGoalPresentation.swift`. Moved layout/media checks to `Tests/OneGoalPresentationTests.swift` so the feature tests do not import app presentation code.
+- Kept native layout and sound choices in `anotchup/models/OneGoalPresentation.swift`. Moved layout/media checks to `Tests/OneGoalPresentationTests.swift` so the feature tests do not import app presentation code.
 - Converted behavior and adapter-contract runners to XCTest using public imports, without `@testable`. Real scheduler tests yield the main actor with asynchronous waits; blocking its executor with a nested run loop prevented callback delivery under XCTest.
 - Extended boundary checks to inspect the package graph and reject app-local copies of feature types. Added four Python test cases for the rules.
 - `scripts/verify.sh --build` passed: two XCTest cases containing 110 behavior and 67 contract assertions, 218 presentation/media checks, 104 renderer checks, four boundary-rule test cases, project validation, whitespace checks, and the unsigned Debug build. All 499 existing assertions/checks remain. No app launch, installation, audio, or permission interaction occurred.
@@ -204,17 +207,33 @@ Toolchain used: macOS with full Xcode 27.2 (27B52), its selected Swift/macOS SDK
 - Added nine public-API XCTest cases, each run with memory and isolated UserDefaults persistence. These cover editor lifecycle and validation, duration controls, two sessions sharing one store/monitor, focus-request isolation, reconstruction, and editor teardown. They do not create windows or validate physical focus transfer.
 - `scripts/verify.sh --build` passed the editor tests, existing 499 assertions/checks, four boundary-rule test cases, project validation, whitespace checks, and unsigned Debug build. No app launch, installation, audio, or permission interaction occurred. The existing MediaRemoteAdapter macOS 14/15 warning remains; native focus acceptance is still manual.
 
-Next architecture slice: characterize and extract shell interaction policy, starting with editor protection and delayed-close cancellation. Keep shared navigation and per-display state explicit. The branding/automation audit and coordinated mechanical rename remain separate work; inherited publishing automation is not cleared for use.
+## Shell hover slice
+
+- Added the independent `NotchShell` library and public-API test target. It owns hover decisions and opaque pending-action tickets, not native tasks or window effects. See [the shell contract](notch-shell-contract.md).
+- Each `AnotchupViewModel` owns a session. Open, successful close, and destruction synchronously invalidate tickets; the common close guard now uses package policy. `ContentView` routes hover and protection-release delays through one host function and cancels its local tasks on disappearance. Shared tab selection and native focus transfer are unchanged.
+- Kept the existing hover duration and 100 ms close delay. Pending opens now recheck the hover preference at delivery. Replaced/canceled callbacks cannot close a newly opened notch or consume another session's request.
+- Nine deterministic tests cover decision matrices, one-shot delivery, cancellation/replacement, protection at delivery, recreation, and display-session isolation. They exercise package contracts, not actual display removal or SwiftUI callback ordering. Boundary checks now enforce separation of `NotchShell` and `WorkingOn`.
+- `scripts/verify.sh --build` passed all 20 XCTest cases across the two test targets, the existing 499 assertions/checks, four Python boundary tests, project/whitespace checks, and unsigned Debug build. No app launch, sound, installation, or permission interaction occurred. The existing MediaRemoteAdapter macOS 14/15 warning remains.
+
+The next slice at this point was shortcut auto-close. It is recorded below; shared navigation/focus transfer and other delayed work remain unfinished.
+
+## Coordinated rename and shortcut slice
+
+- Renamed the Xcode project/scheme, source paths, app-owned types, localization product keys, resources, and XPC helper to anotchup. The main preferences domain stays unchanged. Helper client/service identifiers and generated app metadata agree. `xcodebuild -list -project anotchup.xcodeproj` lists the renamed targets and schemes.
+- Added checked attribution/compatibility exceptions and temporary-directory Shelf migration tests. The new Shelf path wins; migration copies without deleting the original, with failure cleanup and retry. See [the rename contract](rename-contract.md).
+- Quarantined inherited release, nightly, website, and translation workflows outside `.github/workflows`. Active unsigned build/check paths now use the renamed project. Release licensing, signing, and destination configuration are not complete.
+- Verified the rename with `scripts/verify.sh --build` before continuing shell changes. Then generalized pending-action tickets and moved the three-second shortcut close from the app delegate to each display view model. Pointer cancellation affects only hover; reopen/close/teardown invalidate both lanes. App lifecycle paths cancel pending work; removed owners release subscriptions.
+- Added six public-API shortcut contract tests. Intentional change: one display's shortcut no longer cancels another display's deadline. Tests verify component policy, not real window lifecycle or task delivery.
+- `scripts/verify.sh --build` passed 26 XCTest cases, the existing 499 assertions/checks, four boundary-rule and four identity Python tests, 39 workflow utility tests, Shelf migration tests, project/whitespace checks, and the unsigned Debug build. No app launch, installation, permission request, audio, real-user migration, or publication occurred. The existing MediaRemoteAdapter macOS 14/15 mismatch remains; signed XPC runtime behavior and native focus remain untested.
+
+Next slice: extract a testable display lifecycle owner and shared navigation/focus-transfer policy. Drag, preview, geometry, and cross-feature effects still need extraction. Do not treat the shell checklist as complete.
 
 ## Current compatibility exceptions
 
-Until their migration steps are complete:
-
-- Xcode project/scheme/source root: `boringNotch`.
 - App bundle/preferences identity: `com.iameugenechang.mynotch`.
-- Helper identity: `com.iameugenechang.mynotch.BoringNotchXPCHelper`.
 - Working on persistence: `oneGoal.current` and existing appearance keys.
-- Shelf storage: the existing Application Support `boringNotch/Shelf` location.
+- Legacy Shelf reads and external media authorization identity, listed in [the rename contract](rename-contract.md).
 - Repository URL: `https://github.com/iameugenechang/mynotch`.
+- Upstream attribution and archived external publishing history.
 
-These are compatibility details, not product branding. Remove an exception only when its replacement is implemented and verified.
+The project/scheme/source root are now `anotchup`; the helper is `com.iameugenechang.mynotch.AnotchupXPCHelper`. These are no longer pending renames. A future main bundle-identity migration remains separate work.
