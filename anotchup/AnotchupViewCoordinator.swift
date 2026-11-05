@@ -11,6 +11,7 @@ import Defaults
 import NotchShell
 import NotchShellAdapters
 import SwiftUI
+import SystemHUD
 
 enum SneakContentType {
     case brightness
@@ -29,13 +30,6 @@ struct sneakPeek {
     var icon: String = ""
 }
 
-struct SharedSneakPeek: Codable {
-    var show: Bool
-    var type: String
-    var value: String
-    var icon: String
-}
-
 enum BrowserType {
     case chromium
     case safari
@@ -50,7 +44,7 @@ struct ExpandedItem {
 
 @MainActor
 class AnotchupViewCoordinator: ObservableObject {
-    static let shared = AnotchupViewCoordinator()
+    static let shared = makeAppViewCoordinator()
 
     let navigation = NotchNavigation()
     private var navigationObservation: AnyCancellable?
@@ -60,7 +54,7 @@ class AnotchupViewCoordinator: ObservableObject {
     }
     @Published var helloAnimationRunning: Bool = false
     private let previewLifetime = NotchInteractionLifetime(scheduler: TaskNotchDelayScheduler())
-    private var hudEnableTask: Task<Void, Never>?
+    private let hudActivation: HUDActivation
 
     @AppStorage("firstLaunch") var firstLaunch: Bool = true
     @AppStorage("showWhatsNew") var showWhatsNew: Bool = true
@@ -107,7 +101,8 @@ class AnotchupViewCoordinator: ObservableObject {
     private var accessibilityObserver: Any?
     private var hudReplacementCancellable: AnyCancellable?
 
-    private init() {
+    init(hudActivation: HUDActivation) {
+        self.hudActivation = hudActivation
         navigationObservation = navigation.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
@@ -136,83 +131,39 @@ class AnotchupViewCoordinator: ObservableObject {
             forName: Notification.Name.accessibilityAuthorizationChanged,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             Task { @MainActor in
-                if Defaults[.hudReplacement] {
-                    await MediaKeyInterceptor.shared.start(promptIfNeeded: false)
-                }
+                self?.hudActivation.setEnabled(Defaults[.hudReplacement])
             }
         }
 
         // Observe changes to hudReplacement
-        hudReplacementCancellable = Defaults.publisher(.hudReplacement)
+        hudReplacementCancellable = Defaults.publisher(.hudReplacement, options: [])
             .sink { [weak self] change in
                 Task { @MainActor in
                     guard let self = self else { return }
 
-                    self.hudEnableTask?.cancel()
-                    self.hudEnableTask = nil
-
-                    if change.newValue {
-                        self.hudEnableTask = Task { @MainActor in
-                            let granted = await XPCHelperClient.shared.ensureAccessibilityAuthorization(promptIfNeeded: true)
-                            if Task.isCancelled { return }
-
-                            if granted {
-                                await MediaKeyInterceptor.shared.start()
-                            } else {
-                                Defaults[.hudReplacement] = false
-                            }
-                        }
-                    } else {
-                        MediaKeyInterceptor.shared.stop()
-                    }
+                    // Subscription changes represent explicit preference changes;
+                    // initial startup is handled below without prompting.
+                    self.hudActivation.setEnabled(change.newValue, promptIfNeeded: change.newValue)
                 }
             }
 
-        Task { @MainActor in
-            helloAnimationRunning = firstLaunch
-
-            if Defaults[.hudReplacement] {
-                let authorized = await XPCHelperClient.shared.isAccessibilityAuthorized()
-                if !authorized {
-                    Defaults[.hudReplacement] = false
-                } else {
-                    await MediaKeyInterceptor.shared.start(promptIfNeeded: false)
-                }
-            }
-        }
+        helloAnimationRunning = firstLaunch
+        hudActivation.setEnabled(Defaults[.hudReplacement])
     }
     
     @objc func sneakPeekEvent(_ notification: Notification) {
-        let decoder = JSONDecoder()
-        guard let data = notification.userInfo?.values.compactMap({ $0 as? Data }).first else { return }
-        if let decodedData = try? decoder.decode(
-            SharedSneakPeek.self, from: data)
-        {
-            let contentType =
-                decodedData.type == "brightness"
-                ? SneakContentType.brightness
-                : decodedData.type == "volume"
-                    ? SneakContentType.volume
-                    : decodedData.type == "backlight"
-                        ? SneakContentType.backlight
-                        : decodedData.type == "mic"
-                            ? SneakContentType.mic : SneakContentType.brightness
-
-            let formatter = NumberFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.numberStyle = .decimal
-            let value = CGFloat((formatter.number(from: decodedData.value) ?? 0.0).floatValue)
-            let icon = decodedData.icon
-
-            print("Decoded: \(decodedData), Parsed value: \(value)")
-
-            toggleSneakPeek(status: decodedData.show, type: contentType, value: value, icon: icon)
-
-        } else {
-            print("Failed to decode JSON data")
+        guard let data = notification.userInfo?.values.compactMap({ $0 as? Data }).first,
+              let message = try? HUDMessage.decode(data) else { return }
+        let contentType: SneakContentType
+        switch message.kind {
+        case .brightness: contentType = .brightness
+        case .volume: contentType = .volume
+        case .backlight: contentType = .backlight
+        case .mic: contentType = .mic
         }
+        toggleSneakPeek(status: message.show, type: contentType, value: CGFloat(message.value), icon: message.icon)
     }
 
     func toggleSneakPeek(
@@ -242,6 +193,15 @@ class AnotchupViewCoordinator: ObservableObject {
         }, apply: { [weak self] _ in
             self?.toggleSneakPeek(status: false, type: .music)
         })
+    }
+
+    func stop() {
+        hudReplacementCancellable?.cancel()
+        if let accessibilityObserver { NotificationCenter.default.removeObserver(accessibilityObserver) }
+        accessibilityObserver = nil
+        hudActivation.stop()
+        cancelPreviews()
+        previewLifetime.invalidate()
     }
 
     func cancelPreviews() {

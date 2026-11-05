@@ -262,6 +262,10 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 
 `ShelfFeature` owns collection transactions, async import/validation, and sharing completion. `ShelfAdapters` stores JSON snapshots. Seven new package cases cover real/memory persistence, failed saves, corruption, concurrent validation, canceled imports, and sharing ownership. Production temporary-file tests cover isolated creation, cleanup, path traversal, and symlink refusal. `scripts/verify.sh --build` passed 64 XCTest cases plus existing suites and the unsigned Debug build (`/tmp/anotchup-shelf-sharing.log`). No picker or user bookmark was accessed. Native bookmark/item-provider conformance remains open. See [the Shelf contract](shelf-contract.md).
 
+## System HUD and connection ownership slice
+
+`SystemHUD` now owns validated HUD messages, authorization/activation ordering, and connection generations. Composition supplies native effects. Five tests and the unsigned Debug build passed (`/tmp/anotchup-hud-build.log`, 69 XCTest cases plus existing suites). The XPC client rejects replaced-connection results and stale invalidation callbacks; authorization monitoring is main-actor confined and stops explicitly. Native signed-helper/event-tap acceptance is not claimed. See [the System HUD contract](system-hud-contract.md).
+
 ## Current compatibility exceptions
 
 - App bundle/preferences identity: `com.iameugenechang.mynotch`.

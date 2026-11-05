@@ -12,6 +12,7 @@ import AVFoundation
 
 private let kSystemDefinedEventType = CGEventType(rawValue: 14)!
 
+@MainActor
 final class MediaKeyInterceptor {
     static let shared = MediaKeyInterceptor()
     
@@ -64,6 +65,14 @@ final class MediaKeyInterceptor {
             }
         }
         
+        guard !Task.isCancelled, Defaults[.hudReplacement] else { return }
+        _ = startAuthorized()
+    }
+
+    /// Called only after authorization by app composition. Never prompts.
+    @discardableResult
+    func startAuthorized() -> Bool {
+        if eventTap != nil { return true }
         let mask = CGEventMask(1 << kSystemDefinedEventType.rawValue)
         eventTap = CGEvent.tapCreate(
             tap: .cghidEventTap,
@@ -73,7 +82,8 @@ final class MediaKeyInterceptor {
             callback: { _, _, cgEvent, userInfo in
                 guard let userInfo else { return Unmanaged.passRetained(cgEvent) }
                 let interceptor = Unmanaged<MediaKeyInterceptor>.fromOpaque(userInfo).takeUnretainedValue()
-                return interceptor.handleEvent(cgEvent)
+                // The source is installed only on CFRunLoopGetMain().
+                return MainActor.assumeIsolated { interceptor.handleEvent(cgEvent) }
             },
             userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         )
@@ -85,6 +95,7 @@ final class MediaKeyInterceptor {
             }
             CGEvent.tapEnable(tap: eventTap, enable: true)
         }
+        return eventTap != nil
     }
     
     func stop() {

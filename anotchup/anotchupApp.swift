@@ -12,6 +12,7 @@ import KeyboardShortcuts
 import NotchShellAdapters
 import Sparkle
 import SwiftUI
+import SystemHUD
 import WorkingOn
 import WorkingOnAdapters
 
@@ -50,6 +51,15 @@ struct AnotchupApp: App {
             .keyboardShortcut(KeyEquivalent("Q"), modifiers: .command)
         }
     }
+}
+
+@MainActor
+func makeAppViewCoordinator() -> AnotchupViewCoordinator {
+    AnotchupViewCoordinator(hudActivation: HUDActivation(
+        authorize: { await XPCHelperClient.shared.ensureAccessibilityAuthorization(promptIfNeeded: $0) },
+        activate: { MediaKeyInterceptor.shared.startAuthorized() },
+        deactivate: { MediaKeyInterceptor.shared.stop() },
+        rejected: { if Defaults[.hudReplacement] { Defaults[.hudReplacement] = false } }))
 }
 
 @MainActor
@@ -116,7 +126,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        coordinator.cancelPreviews()
+        coordinator.stop()
         goalStore.stopMonitoringCountdown()
         goalStore.onCountdownFinished = nil
         vm.destroy()
@@ -137,7 +147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         SharingStateManager.shared.stop()
         cleanupDragDetectors()
         cleanupWindows()
-        XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()
+        XPCHelperClient.shared.stop()
     }
 
     @MainActor

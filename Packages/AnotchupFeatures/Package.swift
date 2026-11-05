@@ -5,6 +5,7 @@ let package = Package(
     name: "AnotchupFeatures",
     platforms: [.macOS(.v14)],
     products: [
+        .library(name: "SystemHUD", targets: ["SystemHUD"]),
         .library(name: "ShelfFeature", targets: ["ShelfFeature"]),
         .library(name: "ShelfAdapters", targets: ["ShelfAdapters"]),
         .library(name: "CameraFeature", targets: ["CameraFeature"]),
@@ -16,6 +17,8 @@ let package = Package(
         .library(name: "WorkingOnAdapters", targets: ["WorkingOnAdapters"]),
     ],
     targets: [
+        .target(name: "SystemHUD"),
+        .testTarget(name: "SystemHUDTests", dependencies: ["SystemHUD"]),
         .target(name: "ShelfFeature"),
         .target(name: "ShelfAdapters", dependencies: ["ShelfFeature"]),
         .testTarget(name: "ShelfFeatureTests", dependencies: ["ShelfFeature", "ShelfAdapters"]),

@@ -29,6 +29,7 @@ class ComponentBoundaryTests(unittest.TestCase):
             {"name": "MediaFeature", "dependencies": []},
             {"name": "CalendarFeature", "dependencies": []},
             {"name": "CameraFeature", "dependencies": []},
+            {"name": "SystemHUD", "dependencies": []},
             {"name": "ShelfFeature", "dependencies": []},
             {"name": "ShelfAdapters", "dependencies": [{"byName": ["ShelfFeature", None]}]},
         ]}
@@ -55,6 +56,7 @@ class ComponentBoundaryTests(unittest.TestCase):
                     {"name": "MediaFeature", "dependencies": []},
                     {"name": "CalendarFeature", "dependencies": []},
                     {"name": "CameraFeature", "dependencies": []},
+                    {"name": "SystemHUD", "dependencies": []},
                     {"name": "ShelfFeature", "dependencies": []},
                     {"name": "ShelfAdapters", "dependencies": [{"byName": ["ShelfFeature", None]}]},
                 ]}
