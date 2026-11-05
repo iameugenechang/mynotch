@@ -28,10 +28,13 @@ public protocol MediaProvider: ObservableObject {
     func isActive() -> Bool
     func updatePlaybackInfo() async
     func refresh() async
+    /// Terminal resource release. Called on the main actor by MediaSession.
+    func stop()
 }
 
 public extension MediaProvider {
     func refresh() async { await updatePlaybackInfo() }
+    func stop() {}
 }
 
 public enum MediaCommand: Equatable, Sendable {

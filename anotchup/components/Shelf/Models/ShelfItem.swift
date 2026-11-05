@@ -186,6 +186,15 @@ private extension ShelfItem {
     }
 }
 
+extension Bookmark {
+    @MainActor
+    static func update(in items: inout [ShelfItem], for item: ShelfItem, newBookmark: Data) {
+        guard let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
+        guard case .file = items[idx].kind else { return }
+        items[idx].kind = .file(bookmark: newBookmark)
+    }
+}
+
 // MARK: - Identity key for deduplication
 extension ShelfItem {
     var identityKey: String {

@@ -49,8 +49,8 @@ final class CalendarQueryTests: XCTestCase {
             }
         }
         let a = Task { await session.load(query()) }
-        // Yield until A owns its continuation, so the newer request is deterministic.
-        while completions.isEmpty { await Task.yield() }
+        for _ in 0..<1_000 where completions.isEmpty { try? await Task.sleep(for: .milliseconds(1)) }
+        guard !completions.isEmpty else { a.cancel(); return XCTFail("First query did not start") }
         let b = Task { await session.load(query(ids: ["home"])) }
         await fulfillment(of: [started], timeout: 1)
         guard completions.count == 2 else { a.cancel(); b.cancel(); return }
@@ -76,7 +76,8 @@ final class CalendarQueryTests: XCTestCase {
             return try await withCheckedThrowingContinuation { completion = $0 }
         }
         let first = Task { await session.load(query()) }
-        while completion == nil { await Task.yield() }
+        for _ in 0..<1_000 where completion == nil { try? await Task.sleep(for: .milliseconds(1)) }
+        guard completion != nil else { first.cancel(); return XCTFail("Query did not start") }
         session.cancel()
         completion?.resume(throwing: CalendarQueryError.accessDenied)
         await first.value

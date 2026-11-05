@@ -1,6 +1,6 @@
 # Notch shell contract
 
-This is a partial shell extraction, not a complete window/session architecture. `NotchShell` lives in `Packages/AnotchupFeatures`, imports Foundation and Combine, and has no dependency on Working on or native UI services. `NotchShellAdapters` depends on it and implements one-shot scheduling with Swift tasks.
+`NotchShell` owns interaction policy, shared navigation, geometry arithmetic, and display-resource lifetimes. It lives in `Packages/AnotchupFeatures`, imports Foundation and Combine, and has no dependency on Working on or native UI services. `NotchShellAdapters` implements one-shot scheduling and notification registration ownership.
 
 ## Ownership
 
@@ -8,7 +8,9 @@ Each main-actor `AnotchupViewModel` owns one `NotchInteractionLifetime`. That ow
 
 `ContentView` supplies hover state and applies animation/window effects. The view model supplies shortcut state and effects. Both read current protection at delivery, not when scheduling. Callbacks capture the model weakly; hover callbacks capture the required SwiftUI state bindings instead of the whole view. State readers must be side-effect-free. Effect callbacks may cancel or schedule more work.
 
-The coordinator owns one `NotchNavigation` for shared tab selection and editor-focus requests, plus a lifetime owner for compact/expanded previews. Window creation, geometry measurement, camera authorization, media refresh, and native focus effects still live in the app.
+The coordinator owns one `NotchNavigation` for shared tab selection and editor-focus requests, plus a lifetime owner for compact/expanded previews. `NotchDisplayLifecycle` reconciles selected display IDs: unchanged IDs retain their resources, removed IDs are destroyed before replacements are created, and stop is terminal. App composition supplies window/model creation and destruction. Each resource owns its native observer token.
+
+Geometry arithmetic is pure; screen measurement and animations stay native. `NotchViewDependencies` injects navigation, visibility, sharing/Shelf reads, media refresh, and the user camera command. Constructing a shell model does not request camera permission or construct a media provider. The app's notification adapter retains registrations, defers delivery to the main actor, and rejects queued callbacks after stop or owner release. Callbacks must capture their owner weakly.
 
 ## Decisions
 
@@ -53,6 +55,6 @@ Tests in `Packages/AnotchupFeatures/Tests/NotchShellTests` use public imports, w
 
 Three navigation cases cover close-default precedence, transfer in either native callback order, and removal/canceled requests. Three presentation cases cover drag, resize, preview lane replacement, and teardown.
 
-These 31 shell cases require no windows, camera/media services, or desktop interaction. Most use manual time; the real-adapter cases use bounded asynchronous waits. They do not prove exact timing, SwiftUI callback ordering, or native focus transfer. `scripts/verify.sh --build` also checks package boundaries, the existing Working on suites, and production app compilation.
+Four display/geometry cases and two real notification-adapter cases cover reconciliation, selection/lock policy, navigation/lifetime composition, notification delivery, and observer teardown. These 37 shell cases require no windows, camera/media services, or desktop interaction. Most use manual time; the real-adapter cases use bounded asynchronous waits. They do not prove exact timing, SwiftUI callback ordering, or native focus transfer. `scripts/verify.sh --build` also checks package boundaries, the existing Working on suites, and production app compilation.
 
-Still outside the automated contracts: host lifecycle-event wiring, geometry measurement, actual lock/unlock/display removal, and native window/focus composition. Host cancellation calls compile, but package tests do not invoke the app delegate or create SwiftUI trees. Manual acceptance should cover fast exit/reentry, reopening before a shortcut deadline, shortcut use on two displays, editor/battery/share protection, display removal/lock transitions, and focus transfer. No automated check launches the app to perform those actions.
+Still outside the automated contracts: OS-generated lifecycle events, geometry measurement, actual lock/unlock/display removal, and native window/focus composition. Tests exercise the production notification adapter and package composition, not the app delegate or SwiftUI trees. Manual acceptance should cover fast exit/reentry, reopening before a shortcut deadline, shortcut use on two displays, editor/battery/share protection, display removal/lock transitions, and focus transfer. No automated check launches the app to perform those actions.

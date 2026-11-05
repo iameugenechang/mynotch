@@ -11,6 +11,7 @@ import Foundation
 actor YouTubeMusicAuthManager {
     private var accessToken: String?
     private var authenticationTask: Task<String, Error>?
+    private var generation = UUID()
     private let httpClient: YouTubeMusicHTTPClient
     
     init(httpClient: YouTubeMusicHTTPClient) {
@@ -33,13 +34,15 @@ actor YouTubeMusicAuthManager {
         }
         
         // Start new authentication
+        let current = generation
         let task = Task<String, Error> {
             do {
                 let token = try await httpClient.authenticate()
-                await setToken(token)
+                try Task.checkCancellation()
+                await setToken(token, generation: current)
                 return token
             } catch {
-                await clearAuthenticationTask()
+                await clearAuthenticationTask(generation: current)
                 throw error
             }
         }
@@ -49,17 +52,20 @@ actor YouTubeMusicAuthManager {
     }
     
     func invalidateToken() async {
+        generation = UUID()
         accessToken = nil
         authenticationTask?.cancel()
         authenticationTask = nil
     }
     
-    private func setToken(_ token: String) async {
+    private func setToken(_ token: String, generation: UUID) async {
+        guard self.generation == generation else { return }
         accessToken = token
         authenticationTask = nil
     }
     
-    private func clearAuthenticationTask() async {
+    private func clearAuthenticationTask(generation: UUID) async {
+        guard self.generation == generation else { return }
         authenticationTask = nil
     }
 }

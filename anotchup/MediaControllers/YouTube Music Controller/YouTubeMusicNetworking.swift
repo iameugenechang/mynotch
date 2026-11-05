@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 // MARK: - HTTP Client
 final class YouTubeMusicHTTPClient: ObservableObject {
@@ -14,9 +15,9 @@ final class YouTubeMusicHTTPClient: ObservableObject {
     private static let decoder = JSONDecoder()
     private static let encoder = JSONEncoder()
     
-    init(baseURL: String) {
+    init(baseURL: String, session: URLSession? = nil) {
         self.baseURL = baseURL
-        
+        if let session { self.session = session; return }
         let config = URLSessionConfiguration.default
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.urlCache = nil
@@ -134,6 +135,8 @@ final class YouTubeMusicHTTPClient: ObservableObject {
 // MARK: - WebSocket Client
 actor YouTubeMusicWebSocketClient {
     private var task: URLSessionWebSocketTask?
+    private var listener: Task<Void, Never>?
+    private var generation = UUID()
     private let session: URLSession
     private let onMessage: @Sendable (Data) async -> Void
     private let onDisconnect: @Sendable () async -> Void
@@ -160,18 +163,21 @@ actor YouTubeMusicWebSocketClient {
         task = newTask
         newTask.resume()
         
-        Task { await listenForMessages() }
+        let current = generation
+        listener = Task { await listenForMessages(generation: current) }
     }
     
     func disconnect() async {
+        generation = UUID()
+        listener?.cancel()
+        listener = nil
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
     }
     
-    private func listenForMessages() async {
-        guard let currentTask = task else { return }
-        
-        while !Task.isCancelled && task != nil {
+    private func listenForMessages(generation: UUID) async {
+        guard self.generation == generation, let currentTask = task else { return }
+        while !Task.isCancelled && self.generation == generation {
             do {
                 let message = try await currentTask.receive()
                 
@@ -185,12 +191,15 @@ actor YouTubeMusicWebSocketClient {
                     continue
                 }
                 
+                guard self.generation == generation, !Task.isCancelled else { return }
                 await onMessage(data)
             } catch {
                 break
             }
         }
+        guard self.generation == generation, !Task.isCancelled else { return }
         task = nil
+        listener = nil
         await onDisconnect()
     }
 }

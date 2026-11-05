@@ -9,7 +9,8 @@ import Foundation
 import Combine
 import SwiftUI
 
-class SpotifyController: MediaControllerProtocol {
+@MainActor
+class SpotifyController: @preconcurrency MediaControllerProtocol {
     func setFavorite(_ favorite: Bool) async {
         //Placeholder
     }
@@ -30,6 +31,7 @@ class SpotifyController: MediaControllerProtocol {
     var supportsFavorite: Bool { false }
 
     private var notificationTask: Task<Void, Never>?
+    private var startupTask: Task<Void, Never>?
     
     // Constant for time between command and update
     private let commandUpdateDelay: Duration = .milliseconds(25)
@@ -37,12 +39,37 @@ class SpotifyController: MediaControllerProtocol {
     private var lastArtworkURL: String?
     private var artworkFetchTask: Task<Void, Never>?
     
-    init() {
+    private let execute: (String) async throws -> Void
+    private let fetch: (String) async throws -> NSAppleEventDescriptor?
+    private let running: () -> Bool
+    private let loadArtwork: (URL) async throws -> Data
+    private var refreshRevision = UUID()
+    private var stopped = false
+
+    func stop() {
+        stopped = true
+        refreshRevision = UUID()
+        startupTask?.cancel()
+        notificationTask?.cancel()
+        notificationTask = nil
+        artworkFetchTask?.cancel()
+        artworkFetchTask = nil
+    }
+
+    init(observe: Bool = true,
+         execute: @escaping (String) async throws -> Void = AppleScriptHelper.executeVoid,
+         fetch: @escaping (String) async throws -> NSAppleEventDescriptor? = AppleScriptHelper.execute,
+         running: @escaping () -> Bool = { NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.spotify.client" } },
+         loadArtwork: @escaping (URL) async throws -> Data = { try await ImageService.shared.fetchImageData(from: $0) }) {
+        self.execute = execute
+        self.fetch = fetch
+        self.running = running
+        self.loadArtwork = loadArtwork
+        guard observe else { return }
         setupPlaybackStateChangeObserver()
-        Task {
-            if isActive() {
-                await updatePlaybackInfo()
-            }
+        startupTask = Task { [weak self] in
+            guard let self, self.isActive() else { return }
+            await self.updatePlaybackInfo()
         }
     }
     
@@ -59,6 +86,7 @@ class SpotifyController: MediaControllerProtocol {
     }
     
     deinit {
+        startupTask?.cancel()
         notificationTask?.cancel()
         artworkFetchTask?.cancel()
     }
@@ -85,6 +113,7 @@ class SpotifyController: MediaControllerProtocol {
     }
     
     func setVolume(_ level: Double) async {
+        guard !stopped, level.isFinite else { return }
         let clampedLevel = max(0.0, min(1.0, level))
         let volumePercentage = Int(clampedLevel * 100)
         await executeCommand("set sound volume to \(volumePercentage)")
@@ -93,12 +122,17 @@ class SpotifyController: MediaControllerProtocol {
     }
     
     func isActive() -> Bool {
-        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == playbackState.bundleIdentifier }
+        !stopped && running()
     }
     
     func updatePlaybackInfo() async {
-        guard let descriptor = try? await fetchPlaybackInfoAsync() else { return }
-        guard descriptor.numberOfItems >= 10 else { return }
+        guard !stopped else { return }
+        let revision = UUID()
+        refreshRevision = revision
+        artworkFetchTask?.cancel()
+        artworkFetchTask = nil
+        guard let descriptor = try? await fetchPlaybackInfoAsync(),
+              !Task.isCancelled, refreshRevision == revision, descriptor.numberOfItems >= 10 else { return }
         
         let isPlaying = descriptor.atIndex(1)?.booleanValue ?? false
         let currentTrack = descriptor.atIndex(2)?.stringValue ?? "Unknown"
@@ -131,21 +165,21 @@ class SpotifyController: MediaControllerProtocol {
             state.artwork = existingArtwork
         }
 
-    playbackState = state
+        playbackState = state
 
         if !artworkURL.isEmpty, let url = URL(string: artworkURL) {
             guard artworkURL != lastArtworkURL || state.artwork == nil else { return }
             artworkFetchTask?.cancel()
 
-            let currentState = state
-
-            artworkFetchTask = Task {
+            let loadArtwork = self.loadArtwork
+            artworkFetchTask = Task { [weak self] in
                 do {
-                    let data = try await ImageService.shared.fetchImageData(from: url)
+                    let data = try await loadArtwork(url)
+                    guard !Task.isCancelled else { return }
 
                     await MainActor.run { [weak self] in
-                        guard let self = self else { return }
-                        var updatedState = currentState
+                        guard let self, self.refreshRevision == revision else { return }
+                        var updatedState = self.playbackState
                         updatedState.artwork = data
                         self.playbackState = updatedState
                         self.lastArtworkURL = artworkURL
@@ -153,6 +187,7 @@ class SpotifyController: MediaControllerProtocol {
                     }
                 } catch {
                     await MainActor.run { [weak self] in
+                        guard self?.refreshRevision == revision else { return }
                         self?.artworkFetchTask = nil
                     }
                 }
@@ -163,8 +198,9 @@ class SpotifyController: MediaControllerProtocol {
 // MARK: - Private Methods
     
     private func executeCommand(_ command: String) async {
+        guard !stopped else { return }
         let script = "tell application \"Spotify\" to \(command)"
-        try? await AppleScriptHelper.executeVoid(script)
+        try? await execute(script)
     }
 
     private func executeAndRefresh(_ command: String) async {
@@ -195,7 +231,7 @@ class SpotifyController: MediaControllerProtocol {
         end tell
         """
         
-        return try await AppleScriptHelper.execute(script)
+        return try await fetch(script)
     }
     
 }

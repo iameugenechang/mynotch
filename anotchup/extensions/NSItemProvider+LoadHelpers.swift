@@ -36,35 +36,15 @@ extension NSItemProvider {
                     cont.resume(returning: nil)
                     return
                 }
-                if let url = item as? URL, let data = try? Data(contentsOf: url) {
-                    if !url.absoluteString.contains("com.apple.SwiftUI.filePromises") {
+                if let url = item as? URL {
+                    guard url.isFileURL, url.path.contains("com.apple.SwiftUI.filePromises") else {
                         cont.resume(returning: nil)
                         return
                     }
                     self.suggestedName = self.suggestedName ?? url.lastPathComponent
-                    
-                    let fileManager = FileManager.default
-                    let folderURL = url.deletingLastPathComponent()
-
-                    do {
-                        // Delete the file first
-                        try fileManager.removeItem(at: url)
-                        print("Deleted file: \(url.path)")
-
-                        // Check folder contents
-                        let contents = try fileManager.contentsOfDirectory(atPath: folderURL.path)
-                        if contents.isEmpty {
-                            try fileManager.removeItem(at: folderURL)
-                            print("Folder was empty, deleted folder: \(folderURL.path)")
-                        } else {
-                            print("Folder not deleted — it still contains \(contents.count) item(s).")
-                        }
-
-                    } catch {
-                        print("Error: \(error.localizedDescription)")
-                    }
-                    
-                    cont.resume(returning: data)
+                    // The provider owns its file and parent directory. Copy bytes only;
+                    // our temporary-storage adapter owns cleanup of our later copy.
+                    cont.resume(returning: try? Data(contentsOf: url))
                 } else if let data = item as? Data {
                     cont.resume(returning: data)
                 } else {
@@ -115,12 +95,7 @@ extension NSItemProvider {
                 } else if let data = item as? Data {
                     // Some providers hand out a UTF-8 file URL string, others a bookmark. Prefer parsing string first.
                     if let string = String(data: data, encoding: .utf8) {
-                        if let url = URL(string: string) {
-                            resolvedURL = url
-                        } else if string.hasPrefix("/") {
-                            // Plain file system path
-                            resolvedURL = URL(fileURLWithPath: string)
-                        }
+                        resolvedURL = string.hasPrefix("/") ? URL(fileURLWithPath: string) : URL(string: string)
                     }
                     if resolvedURL == nil {
                         // Fallback: try treating the data as a bookmark
@@ -128,13 +103,9 @@ extension NSItemProvider {
                         resolvedURL = bookmark.resolveURL()
                     }
                 } else if let string = item as? String {
-                    if let url = URL(string: string) {
-                        resolvedURL = url
-                    } else if string.hasPrefix("/") {
-                        resolvedURL = URL(fileURLWithPath: string)
-                    }
+                    resolvedURL = string.hasPrefix("/") ? URL(fileURLWithPath: string) : URL(string: string)
                 }
-                cont.resume(returning: resolvedURL)
+                cont.resume(returning: resolvedURL?.isFileURL == true ? resolvedURL : nil)
             }
         }
     }

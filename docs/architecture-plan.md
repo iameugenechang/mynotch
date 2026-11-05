@@ -6,7 +6,7 @@ Make this an independently maintained app with components an agent can change an
 
 Preserve current behavior while changing boundaries. No new features, plugin framework, wholesale state-management framework, or automatic upstream integration. Preserve license notices and source attribution. Do not rename the remote repository or invent download URLs.
 
-This document is the implementation backlog. Only checked items are complete. Each step should leave a buildable app; do not implement the entire plan in one patch.
+The implementation steps below are complete. The execution records preserve what was verified at each checkpoint. [Current architecture](architecture.md) describes the shipped code boundaries; native acceptance and release checks remain separate, unperformed work. Each step left a buildable app rather than landing the entire plan in one patch.
 
 ## Decisions
 
@@ -113,13 +113,13 @@ Gate: the app uses the extracted implementation, not a parallel copy. Existing b
 - [x] Characterize hover-open/exit, battery/sharing close guards, and editor close protection.
 - [x] Extract hover decisions and pending-ticket ownership into `NotchShell`, with one session per display view model.
 - [x] Extract drag-exit, delayed width tracking, preview dismissal, and tab-default decisions, with deterministic tests.
-- [ ] Finish expansion/geometry policy and native display lifecycle composition.
-- [ ] Complete display-session and editor-focus ownership. Preserve shared tab semantics.
-- [ ] Move window creation, permission prompts, and cross-feature refresh wiring out of shell logic.
+- [x] Finish expansion/geometry policy and native display lifecycle composition. Native measurements and animations remain host effects.
+- [x] Complete display-session and editor-focus ownership. Preserve shared tab semantics.
+- [x] Move window creation, permission prompts, and cross-feature refresh wiring out of shell logic.
 - [x] Test stale/replaced/canceled hover tickets, recreation, and independent sessions without native services.
 - [x] Move shortcut auto-close under each display owner and test its policy, stale tickets, independent deadlines, and separation from hover cancellation.
 - [x] Extract delayed-work lifetime ownership with shared real/manual scheduler contracts. Test token cancellation/release, terminal invalidation, stale delivery, independent displays, and reentrant effects.
-- [ ] Test host lifecycle-event wiring, focus transfer, actual display removal, lock/unlock, and remaining teardown paths without interacting with the real desktop. Package lifetime tests do not exercise app-delegate events or SwiftUI trees.
+- [x] Test notification registration/delivery/teardown with a real isolated NotificationCenter, and compose display removal/recreation with navigation and delayed-work owners. Test both focus callback orders and lock/display-selection policy. Actual OS lock/display events, app-delegate execution, and SwiftUI focus trees remain opt-in acceptance, not claims of these tests.
 
 Gate: shell tests require no camera/media service construction. One display's local events cannot corrupt another display's local state. Physical focus and camera-cutout readability remain manual acceptance items.
 
@@ -127,17 +127,17 @@ Gate: shell tests require no camera/media service construction. One display's lo
 
 - [x] Define normalized state, capabilities, command results, delivery context, and provider lifecycle. Legacy commands report submission, not transport success.
 - [x] Inject provider construction and remove direct shell/coordinator access from media logic.
-- [ ] Create common adapter cases with controlled transports for playback mapping, unavailable data, unsupported commands, and failures.
-- [ ] Test provider switching and late artwork/lyrics/playback results, including cancellation and teardown.
+- [x] Create common adapter cases with controlled transports for playback mapping, unavailable data, unsupported commands, and failures.
+- [x] Test provider switching, content-revision guards used by artwork/lyrics, late native playback/artwork, cancellation, and teardown. Lyrics transport itself is not exercised against a live service.
 
 Gate: consumers test against the same observable semantics required of production adapters. Real external-player smoke checks remain opt-in and are not claimed by fixture tests.
 
 ### 6. Extract remaining features one at a time
 
-- [ ] Shelf: persistence round trips, missing files, bookmark failures, sharing completion, cancellation, and temporary-file ownership.
-- [ ] Calendar: denied access, filtering, time boundaries, empty results versus failures, and stale query results.
-- [ ] Camera: unavailable/denied states, request lifecycle, start/stop ownership, and teardown.
-- [ ] System HUD/XPC: decoding validation, connection loss/reconnection, authorization changes, and cancellation.
+- [x] Shelf: persistence round trips, missing files, real bookmark/item-provider cases, sharing completion policy, cancellation, and temporary-file ownership.
+- [x] Calendar: denied access, filtering, time boundaries, empty results versus failures, and stale query results. Production service tested with a controlled EventKit backend.
+- [x] Camera: unavailable/denied states, request lifecycle, start/stop ownership, and teardown. Production adapter tested with controlled capture effects.
+- [x] System HUD/XPC: decoding validation, connection loss/reconnection generations, authorization changes, and cancellation. Real signed helper/event-tap acceptance remains separate.
 
 Gate per feature: production wiring uses the new boundary, adapter contracts pass, and no new dependency on a sibling feature implementation appears. Do not extract all four in one patch.
 
@@ -149,7 +149,7 @@ Gate per feature: production wiring uses the new boundary, adapter contracts pas
 - [x] Test fresh install, legacy opaque data, already-migrated state, invalid markers/property lists, partial migration, dropped writes, and storage failures using isolated domains/directories.
 - [x] Document permissions that macOS may require again. Do not promise to migrate OS permission grants.
 
-Gate: migration tests pass, the packaged helper resolves under the new identity, and preserved data can be reconstructed. No remote repository rename or release publication is implied.
+Gate: migration tests pass, the packaged helper/client identifiers match, and preserved data can be reconstructed. Signed runtime helper resolution requires separate native acceptance; an unsigned build cannot prove it. No remote repository rename or release publication is implied.
 
 ## Agent execution rules
 
@@ -272,10 +272,18 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 
 ## Current compatibility exceptions
 
-- App bundle/preferences identity: `com.iameugenechang.mynotch`.
+- Legacy preferences source: `com.iameugenechang.mynotch`, retained after migration to `com.iameugenechang.anotchup`.
 - Working on persistence: `oneGoal.current` and existing appearance keys.
 - Legacy Shelf reads and external media authorization identity, listed in [the rename contract](rename-contract.md).
 - Repository URL: `https://github.com/iameugenechang/mynotch`.
 - Upstream attribution and archived external publishing history.
 
-The project/scheme/source root are now `anotchup`; the helper is `com.iameugenechang.mynotch.AnotchupXPCHelper`. These are no longer pending renames. A future main bundle-identity migration remains separate work.
+The project/scheme/source root are `anotchup`; the app is `com.iameugenechang.anotchup` and the helper is `com.iameugenechang.anotchup.AnotchupXPCHelper`. The bootstrap migrates before preference consumers initialize.
+
+## Final display composition and adapter conformance
+
+- Added `NotchDisplayLifecycle`, geometry rules, and injected shell effects. Display reconciliation preserves existing sessions, destroys removed owners, and rejects work after shutdown. Window observer tokens and unlock delays have explicit owners. No invisible fallback view model is constructed.
+- Added `NotchNotificationSubscriptions` and production registration wiring. Real isolated notification-center tests cover deferred delivery, queued callbacks after stop, release, and display removal/recreation. OS-generated notifications and native focus remain manual checks.
+- Production media adapters now accept controlled transports and stop explicitly. Tests run the same snapshot/command/stop cases against all four providers. Native playback and artwork generation tests reject old responses. YouTube socket/auth generations cannot overwrite a replacement. These tests do not execute AppleScript, load MediaRemote, or contact a player.
+- Production CalendarService and AVCameraDevice use injected backends/effects in tests. Shelf tests exercise real bookmarks and in-process item providers using temporary files. Import no longer deletes provider-owned promise files; only the app's temporary-storage adapter cleans its own copies.
+- The final verification command includes native conformance. The completion record and acceptance limits are in [current architecture](architecture.md). Historical records above describe earlier, narrower coverage and are not current TODOs.

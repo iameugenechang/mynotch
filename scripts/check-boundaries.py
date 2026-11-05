@@ -63,7 +63,7 @@ def main():
             code = line.split("//", 1)[0]
             if re.search(r"\bOneGoalStore\s*\.\s*shared\b", code):
                 errors.append(f"{path.relative_to(ROOT)}:{number}: inject the app-owned Working on store")
-            if re.search(r"\b(class|struct|enum|protocol)\s+(OneGoal|OneGoalStore|OneGoalEditorSession|OneGoalPersistence|CountdownScheduling|NotchInteractionState|NotchDelayedActionSession|NotchInteractionLifetime|NotchDelayScheduling|NotchNavigation|NotchTab|MediaSession|MediaProvider|PlaybackState|MediaVisibilityPolicy)\b", code):
+            if re.search(r"\b(class|struct|enum|protocol)\s+(OneGoal|OneGoalStore|OneGoalEditorSession|OneGoalPersistence|CountdownScheduling|NotchInteractionState|NotchDelayedActionSession|NotchInteractionLifetime|NotchDelayScheduling|NotchNavigation|NotchTab|NotchDisplayLifecycle|NotchGeometry|NotchNotificationSubscriptions|MediaSession|MediaProvider|PlaybackState|MediaVisibilityPolicy|CalendarQuery|CalendarQuerySession|CameraSession|CameraDevice|ShelfCollection|ShareInteraction|HUDActivation|HUDMessage|ConnectionOwner|PreferencesMigration|PreferencesDomain)\b", code):
                 errors.append(f"{path.relative_to(ROOT)}:{number}: use the package implementation, not an app copy")
     if errors:
         print("\n".join(errors), file=sys.stderr)

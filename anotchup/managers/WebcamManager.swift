@@ -57,35 +57,49 @@ final class WebcamManager: ObservableObject {
 @MainActor
 final class AVCameraDevice: CameraDevice {
     @Published private(set) var previewLayer: AVCaptureVideoPreviewLayer?
-    private let worker = CaptureWorker()
+    struct Effects {
+        var authorization: () -> CameraAuthorization
+        var available: () -> Bool
+        var request: () async -> Void
+        var start: () async throws -> AVCaptureVideoPreviewLayer?
+        var stop: () async -> Void
+    }
+    private let effects: Effects
 
-    var authorization: CameraAuthorization {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized: return .allowed
-        case .denied: return .denied
-        case .restricted: return .restricted
-        default: return .unknown
-        }
+    init(effects: Effects) { self.effects = effects }
+    convenience init() {
+        let worker = CaptureWorker()
+        self.init(effects: Effects(authorization: {
+            switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized: return .allowed
+            case .denied: return .denied
+            case .restricted: return .restricted
+            default: return .unknown
+            }
+        }, available: {
+            !AVCaptureDevice.DiscoverySession(deviceTypes: [.external, .builtInWideAngleCamera],
+                mediaType: .video, position: .unspecified).devices.isEmpty
+        }, request: { _ = await AVCaptureDevice.requestAccess(for: .video) }, start: {
+            let layer = AVCaptureVideoPreviewLayer(session: try await worker.start())
+            layer.videoGravity = .resizeAspectFill
+            return layer
+        }, stop: { await worker.stop() }))
     }
-    var isAvailable: Bool {
-        !AVCaptureDevice.DiscoverySession(deviceTypes: [.external, .builtInWideAngleCamera],
-            mediaType: .video, position: .unspecified).devices.isEmpty
-    }
+    var authorization: CameraAuthorization { effects.authorization() }
+    var isAvailable: Bool { effects.available() }
     func requestAuthorization() async -> CameraAuthorization {
         guard authorization == .unknown else { return authorization }
-        _ = await AVCaptureDevice.requestAccess(for: .video)
+        await effects.request()
         return authorization
     }
     func start() async throws {
         guard authorization == .allowed else { throw CaptureError.denied }
-        let capture = try await worker.start()
-        let layer = AVCaptureVideoPreviewLayer(session: capture)
-        layer.videoGravity = .resizeAspectFill
-        previewLayer = layer
+        guard isAvailable else { throw CaptureError.unavailable }
+        previewLayer = try await effects.start()
     }
     func stop() async {
         previewLayer = nil
-        await worker.stop()
+        await effects.stop()
     }
 }
 

@@ -15,6 +15,8 @@ public final class MediaSession: ObservableObject {
 
     public func select(_ provider: (any MediaProvider)?) {
         guard !stopped else { return }
+        if let current = self.provider, let provider, current === provider { return }
+        self.provider?.stop()
         generation = UUID()
         revision = Revision(value: UUID())
         subscription = nil
@@ -37,6 +39,8 @@ public final class MediaSession: ObservableObject {
     public func isCurrent(_ revision: Revision) -> Bool { !stopped && self.revision == revision }
 
     public func stop() {
+        guard !stopped else { return }
+        provider?.stop()
         stopped = true
         generation = UUID()
         revision = Revision(value: UUID())

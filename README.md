@@ -33,15 +33,15 @@ open /tmp/anotchup-build/Build/Products/Debug/anotchup.app
 
 The app builds as `anotchup.app`, with bundle identifier `com.iameugenechang.anotchup`. Existing fork preferences migrate before app construction without deleting the old domain. See [identity migration](docs/identity-migration.md), including permissions that macOS may require again. Upstream auto-updates stay disabled.
 
-The project, source paths, app-owned types, and XPC helper now use anotchup names. Shelf storage copies to the new path without deleting the original. See the [rename contract](docs/rename-contract.md) for compatibility exceptions and the [architecture plan](docs/architecture-plan.md) for remaining work. Inherited publishing workflows are disabled, not configured for fork releases.
+The project, source paths, app-owned types, and XPC helper now use anotchup names. Shelf storage copies to the new path without deleting the original. See the [rename contract](docs/rename-contract.md) for compatibility exceptions and the [architecture plan](docs/architecture-plan.md) for implementation history. Inherited publishing workflows are disabled, not configured for fork releases.
 
 ## Checks
 
 Run `scripts/verify.sh` for component, adapter-contract, boundary, identity/migration, workflow, layout, and offscreen renderer checks. Add `--build` to also compile the unsigned app. Checks use isolated preferences, do not launch the app, and never send input, change app focus, or play sounds.
 
-Working on logic/adapters and notch interaction policy, lifetime ownership, and scheduling adapters live in `Packages/AnotchupFeatures`. Run their public-API tests with `xcrun swift test --package-path Packages/AnotchupFeatures`. Native presentation checks remain outside the package.
+Feature logic and dependency-free adapters live in `Packages/AnotchupFeatures`. Run their public-API tests with `xcrun swift test --package-path Packages/AnotchupFeatures`. `scripts/test-native-contracts.sh` tests production media, calendar, camera, bookmark, and item-provider adapters with controlled transports and temporary fixtures. Native rendering stays outside the package.
 
-Verified locally with Xcode 27.2 (27B52) and Python 3 on macOS. See the [Working on component contract](docs/working-on-contract.md) and [notch shell contract](docs/notch-shell-contract.md) for module boundaries, ownership, ordering, and cancellation guarantees.
+Verified locally with Xcode 27.2 (27B52) and Python 3 on macOS. See [current architecture](docs/architecture.md) for the dependency map, component contracts, test coverage, and acceptance limits.
 
 See [Working on implementation and manual checks](docs/one-goal.md). Physical readability and interactive window behavior still require manual acceptance checks.
 

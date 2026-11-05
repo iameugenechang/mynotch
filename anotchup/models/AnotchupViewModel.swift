@@ -13,8 +13,9 @@ import SwiftUI
 
 @MainActor
 class AnotchupViewModel: NSObject, ObservableObject {
-    @ObservedObject var coordinator = AnotchupViewCoordinator.shared
-    @ObservedObject var detector = FullscreenMediaDetector.shared
+    @ObservedObject var coordinator: AnotchupViewCoordinator
+    @ObservedObject var detector: FullscreenMediaDetector
+    private let dependencies: NotchViewDependencies
 
     let animationLibrary: AnotchupAnimations = .init()
     let animation: Animation?
@@ -45,9 +46,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
     @Published var notchSize: CGSize = getClosedNotchSize()
     @Published var closedNotchSize: CGSize = getClosedNotchSize()
     
-    let webcamManager = WebcamManager.shared
     @Published var isCameraExpanded: Bool = false
-    @Published var isRequestingAuthorization: Bool = false
     
     // Subscription and scheduler tokens also cancel on release. Explicit removal
     // invalidates the owner so retained native callbacks cannot restart its work.
@@ -62,7 +61,15 @@ class AnotchupViewModel: NSObject, ObservableObject {
         self.init(screenUUID: screenUUID, scheduler: TaskNotchDelayScheduler())
     }
 
-    init(screenUUID: String? = nil, scheduler: any NotchDelayScheduling) {
+    convenience init(screenUUID: String? = nil, scheduler: any NotchDelayScheduling) {
+        self.init(screenUUID: screenUUID, scheduler: scheduler, dependencies: makeAppNotchDependencies())
+    }
+
+    init(screenUUID: String? = nil, scheduler: any NotchDelayScheduling,
+         dependencies: NotchViewDependencies) {
+        self.dependencies = dependencies
+        coordinator = dependencies.coordinator
+        detector = dependencies.detector
         interactions = NotchInteractionLifetime(scheduler: scheduler)
         animation = animationLibrary.animation
 
@@ -119,8 +126,8 @@ class AnotchupViewModel: NSObject, ObservableObject {
     // Computed property for effective notch height
     var effectiveClosedNotchHeight: CGFloat {
         let currentScreen = screenUUID.flatMap { NSScreen.screen(withUUID: $0) }
-        let noNotchAndFullscreen = hideOnClosed && (currentScreen?.safeAreaInsets.top ?? 0 <= 0 || currentScreen == nil)
-        return noNotchAndFullscreen ? 0 : closedNotchSize.height
+        return NotchGeometry.closedHeight(height: closedNotchSize.height, hide: hideOnClosed,
+                                          hasCutout: (currentScreen?.safeAreaInsets.top ?? 0) > 0)
     }
 
     var chinHeight: CGFloat {
@@ -132,72 +139,18 @@ class AnotchupViewModel: NSObject, ObservableObject {
             return 0
         }
 
-        if notchState == .open { return 0 }
-
-        let menuBarHeight = currentScreen.frame.maxY - currentScreen.visibleFrame.maxY
-        let currentHeight = effectiveClosedNotchHeight
-
-        if currentHeight == 0 { return 0 }
-
-        return max(0, menuBarHeight - currentHeight)
+        return NotchGeometry.chinHeight(menuBar: currentScreen.frame.maxY - currentScreen.visibleFrame.maxY,
+                                        closed: effectiveClosedNotchHeight, hiddenTitleBar: Defaults[.hideTitleBar],
+                                        isOpen: notchState == .open)
     }
 
-    func toggleCameraPreview() {
-        if isRequestingAuthorization {
-            return
-        }
-
-        switch webcamManager.authorizationStatus {
-        case .authorized:
-            if webcamManager.isSessionRunning {
-                webcamManager.stopSession()
-                isCameraExpanded = false
-            } else if webcamManager.cameraAvailable {
-                webcamManager.startSession()
-                isCameraExpanded = true
-            }
-
-        case .denied, .restricted:
-            DispatchQueue.main.async {
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
-
-                let alert = NSAlert()
-                alert.messageText = "Camera Access Required"
-                alert.informativeText = "Please allow camera access in System Settings."
-                alert.addButton(withTitle: "Open Settings")
-                alert.addButton(withTitle: "Cancel")
-
-                if alert.runModal() == .alertFirstButtonReturn {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-
-                NSApp.setActivationPolicy(.accessory)
-                NSApp.deactivate()
-            }
-
-        case .notDetermined:
-            isRequestingAuthorization = true
-            webcamManager.checkAndRequestVideoAuthorization()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                self.isRequestingAuthorization = false
-            }
-
-        default:
-            break
-        }
-    }
+    func toggleCameraPreview() { dependencies.toggleCamera(self) }
     
     func isMouseHovering(position: NSPoint = NSEvent.mouseLocation) -> Bool {
         let screenFrame = getScreenFrame(screenUUID)
         if let frame = screenFrame {
             
-            let baseY = frame.maxY - notchSize.height
-            let baseX = frame.midX - notchSize.width / 2
-            
-            return position.y >= baseY && position.x >= baseX && position.x <= baseX + notchSize.width
+            return NotchGeometry.contains(position, screen: frame, notch: notchSize)
         }
         
         return false
@@ -210,7 +163,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
     private var closeInteractionState: NotchInteractionState {
         NotchInteractionState(
             isOpen: notchState == .open,
-            isSharing: SharingStateManager.shared.preventNotchClose,
+            isSharing: dependencies.isSharing(),
             isEditorActive: isGoalEditorActive
         )
     }
@@ -235,7 +188,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
         self.notchState = .open
         
         // Force music information update when notch is opened
-        MusicManager.shared.forceUpdate()
+        dependencies.refreshMedia()
     }
 
     func openGoalEditor() {
@@ -257,7 +210,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
 
         coordinator.navigation.close(
             resetSelection: resetSelectedTab,
-            shelfHasItems: !ShelfStateViewModel.shared.isEmpty,
+            shelfHasItems: dependencies.shelfHasItems(),
             opensShelf: Defaults[.openShelfByDefault],
             keepsLastTab: coordinator.openLastTabByDefault
         )

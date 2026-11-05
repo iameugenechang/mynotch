@@ -11,6 +11,7 @@ python3 scripts/check-boundaries.py
 scripts/test-identity.sh
 python3 -m unittest discover -s .github/scripts/tests
 scripts/test-one-goal.sh
+scripts/test-native-contracts.sh
 plutil -lint anotchup.xcodeproj/project.pbxproj
 git diff --check
 if [[ "${1:-}" == "--build" ]]; then

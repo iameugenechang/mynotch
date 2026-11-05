@@ -9,7 +9,8 @@ import Foundation
 import Combine
 import SwiftUI
 
-class AppleMusicController: MediaControllerProtocol {
+@MainActor
+class AppleMusicController: @preconcurrency MediaControllerProtocol {
     // MARK: - Properties
     @Published private var playbackState: PlaybackState = PlaybackState(
         bundleIdentifier: "com.apple.Music",
@@ -29,14 +30,35 @@ class AppleMusicController: MediaControllerProtocol {
     }
 
     private var notificationTask: Task<Void, Never>?
+    private var startupTask: Task<Void, Never>?
     
     // MARK: - Initialization
-    init() {
+    private let execute: (String) async throws -> Void
+    private let fetch: (String) async throws -> NSAppleEventDescriptor?
+    private let running: () -> Bool
+    private var refreshRevision = UUID()
+    private var stopped = false
+
+    func stop() {
+        stopped = true
+        refreshRevision = UUID()
+        startupTask?.cancel()
+        notificationTask?.cancel()
+        notificationTask = nil
+    }
+
+    init(observe: Bool = true,
+         execute: @escaping (String) async throws -> Void = AppleScriptHelper.executeVoid,
+         fetch: @escaping (String) async throws -> NSAppleEventDescriptor? = AppleScriptHelper.execute,
+         running: @escaping () -> Bool = { NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.Music" } }) {
+        self.execute = execute
+        self.fetch = fetch
+        self.running = running
+        guard observe else { return }
         setupPlaybackStateChangeObserver()
-        Task {
-            if isActive() {
-                await updatePlaybackInfo()
-            }
+        startupTask = Task { [weak self] in
+            guard let self, self.isActive() else { return }
+            await self.updatePlaybackInfo()
         }
     }
     
@@ -53,6 +75,7 @@ class AppleMusicController: MediaControllerProtocol {
     }
     
     deinit {
+        startupTask?.cancel()
         notificationTask?.cancel()
     }
     
@@ -103,6 +126,7 @@ class AppleMusicController: MediaControllerProtocol {
     }
     
     func setVolume(_ level: Double) async {
+        guard !stopped, level.isFinite else { return }
         let clampedLevel = max(0.0, min(1.0, level))
         let volumePercentage = Int(clampedLevel * 100)
         await executeCommand("set sound volume to \(volumePercentage)")
@@ -111,26 +135,29 @@ class AppleMusicController: MediaControllerProtocol {
     }
     
     func isActive() -> Bool {
-        let runningApps = NSWorkspace.shared.runningApplications
-        return runningApps.contains { $0.bundleIdentifier == "com.apple.Music" }
+        !stopped && running()
     }
 
     func setFavorite(_ favorite: Bool) async {
+        guard !stopped else { return }
         let script = """
         tell application \"Music\"
             try
-                set favorited of current track to " + (favorite ? "true" : "false") + "
+                set favorited of current track to \(favorite ? "true" : "false")
             end try
         end tell
         """
-        try? await AppleScriptHelper.executeVoid(script)
+        try? await execute(script)
         try? await Task.sleep(for: .milliseconds(150))
         await updatePlaybackInfo()
     }
     
     func updatePlaybackInfo() async {
-        guard let descriptor = try? await fetchPlaybackInfoAsync() else { return }
-        guard descriptor.numberOfItems >= 11 else { return }
+        guard !stopped else { return }
+        let revision = UUID()
+        refreshRevision = revision
+        guard let descriptor = try? await fetchPlaybackInfoAsync(),
+              !Task.isCancelled, refreshRevision == revision, descriptor.numberOfItems >= 11 else { return }
         var updatedState = self.playbackState
         
         updatedState.isPlaying = descriptor.atIndex(1)?.booleanValue ?? false
@@ -154,8 +181,9 @@ class AppleMusicController: MediaControllerProtocol {
     // MARK: - Private Methods
     
     private func executeCommand(_ command: String) async {
+        guard !stopped else { return }
         let script = "tell application \"Music\" to \(command)"
-        try? await AppleScriptHelper.executeVoid(script)
+        try? await execute(script)
     }
     
     private func fetchPlaybackInfoAsync() async throws -> NSAppleEventDescriptor? {
@@ -194,7 +222,7 @@ class AppleMusicController: MediaControllerProtocol {
         end tell
         """
         
-        return try await AppleScriptHelper.execute(script)
+        return try await fetch(script)
     }
     
 }

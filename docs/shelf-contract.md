@@ -12,6 +12,8 @@
 
 ## Temporary files and sharing
 
+Item-provider promise files remain provider-owned: import copies bytes and never deletes the original file or directory. File-URL decoding rejects remote URLs and turns absolute paths into file URLs.
+
 New temporary files live under `anotchup-shelf` in the system temporary directory. Suggested filenames are reduced to a leaf name. Cleanup rejects unrelated paths, sibling-prefix paths, and symlinks resolving outside that root. Legacy temporary files elsewhere are deliberately not deleted automatically.
 
 Each `ShareInteraction` acquires one close-protection count. Picker-to-service handoff does not increment it twice. Success, failure, picker cancellation, and explicit shutdown release it and run cleanup once. A canceled picker callback cannot finish an already-running service. There is no two-second timeout pretending a share has completed.
@@ -20,4 +22,4 @@ Quick sharing retains each operation's security-scoped access and temporary text
 
 ## Verification limits
 
-Package tests cover collection behavior with real JSON and memory persistence, failed writes, corruption recovery, concurrent validation, canceled imports, and sharing callback policy. Standalone tests exercise production temporary-file creation/deletion in an isolated directory. Tests do not open a picker, access user bookmarks, request security scopes, or invoke a sharing provider. Native bookmark and item-provider conformance tests remain separate work.
+Package tests cover collection behavior with real JSON and memory persistence, failed writes, corruption recovery, concurrent validation, canceled imports, and sharing callback policy. Standalone tests exercise production temporary-file creation/deletion, real bookmark round trips/corruption/missing files, and in-process item-provider data/text/error/file/promise cases. All files are temporary fixtures. Tests do not open a picker, access user bookmarks, request user security scopes, or invoke a sharing service. OS sharing callbacks and sandbox access remain manual acceptance.

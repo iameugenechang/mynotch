@@ -20,17 +20,58 @@ protocol CalendarServiceProviding {
     func events(from start: Date, to end: Date, calendars: [String]) async throws -> [EventModel]
 }
 
+@MainActor
+protocol CalendarBackend {
+    func status(for type: EKEntityType) -> EKAuthorizationStatus
+    func request(_ type: EKEntityType) async throws -> Bool
+    func calendars(for type: EKEntityType) -> [CalendarModel]
+    func events(from start: Date, to end: Date, ids: [String], type: EKEntityType) async throws -> [EventModel]
+    func complete(_ id: String, completed: Bool) throws
+}
+
 class CalendarService: CalendarServiceProviding {
-    private let store: EKEventStore
+    private let backend: any CalendarBackend
 
-    init(store: EKEventStore = EKEventStore()) { self.store = store }
-
-    func authorizationStatus(for type: EKEntityType) -> EKAuthorizationStatus {
-        EKEventStore.authorizationStatus(for: type)
+    init(backend: any CalendarBackend) { self.backend = backend }
+    convenience init(store: EKEventStore = EKEventStore()) {
+        self.init(backend: EventKitCalendarBackend(store: store))
     }
+
+    func authorizationStatus(for type: EKEntityType) -> EKAuthorizationStatus { backend.status(for: type) }
+    func requestAccess(to type: EKEntityType) async throws -> Bool { try await backend.request(type) }
+    private func hasAccess(to type: EKEntityType) -> Bool { authorizationStatus(for: type) == .fullAccess }
+
+    func calendars() async -> [CalendarModel] {
+        [EKEntityType.event, .reminder].filter { hasAccess(to: $0) }.flatMap { backend.calendars(for: $0) }
+    }
+    func events(from start: Date, to end: Date, calendars ids: [String]) async throws -> [EventModel] {
+        guard !ids.isEmpty else { return [] }
+        guard hasAccess(to: .event) || hasAccess(to: .reminder) else { throw CalendarQueryError.accessDenied }
+        var result: [EventModel] = []
+        for type in [EKEntityType.event, .reminder] where hasAccess(to: type) {
+            let selected = backend.calendars(for: type).filter { ids.contains($0.id) }.map(\.id)
+            guard !selected.isEmpty else { continue }
+            let values = try await backend.events(from: start, to: end, ids: selected, type: type)
+            result += values.filter {
+                selected.contains($0.calendar.id) && ($0.calendar.isReminder || $0.end <= $0.start
+                    ? $0.start >= start && $0.start < end : $0.start < end && $0.end > start)
+            }
+        }
+        return result.sorted { $0.start < $1.start }
+    }
+    func setReminderCompleted(reminderID: String, completed: Bool) async throws {
+        guard hasAccess(to: .reminder) else { throw CalendarQueryError.accessDenied }
+        try backend.complete(reminderID, completed: completed)
+    }
+}
+
+private class EventKitCalendarBackend: CalendarBackend {
+    private let store: EKEventStore
+    init(store: EKEventStore) { self.store = store }
+    func status(for type: EKEntityType) -> EKAuthorizationStatus { EKEventStore.authorizationStatus(for: type) }
     
     @MainActor
-    func requestAccess(to type: EKEntityType) async throws -> Bool {
+    func request(_ type: EKEntityType) async throws -> Bool {
         if #available(macOS 14.0, *) {
             switch type {
             case .event:
@@ -45,58 +86,18 @@ class CalendarService: CalendarServiceProviding {
         }
     }
     
-    private func hasAccess(to entityType: EKEntityType) -> Bool {
-        let status = authorizationStatus(for: entityType)
-        if #available(macOS 14.0, *) {
-            return status == .fullAccess
-        } else {
-            return status == .authorized
-        }
+    func calendars(for type: EKEntityType) -> [CalendarModel] {
+        store.calendars(for: type).map { CalendarModel(from: $0) }
     }
-    
-    func calendars() async -> [CalendarModel] {
-        var calendars: [EKCalendar] = []
-        
-        for type in [EKEntityType.event, .reminder] where hasAccess(to: type) {
-            calendars.append(contentsOf: store.calendars(for: type))
+
+    func events(from start: Date, to end: Date, ids: [String], type: EKEntityType) async throws -> [EventModel] {
+        let calendars = store.calendars(for: type).filter { ids.contains($0.calendarIdentifier) }
+        guard !calendars.isEmpty else { return [] }
+        if type == .event {
+            let predicate = store.predicateForEvents(withStart: start, end: end, calendars: calendars)
+            return store.events(matching: predicate).compactMap { EventModel(from: $0) }
         }
-        
-        return calendars.map { CalendarModel(from: $0) }
-    }
-    
-    func events(from start: Date, to end: Date, calendars ids: [String]) async throws -> [EventModel] {
-        guard !ids.isEmpty else { return [] }
-        guard hasAccess(to: .event) || hasAccess(to: .reminder) else {
-            throw CalendarQueryError.accessDenied
-        }
-        let allCalendars = await self.calendars()
-        let filteredCalendars = allCalendars.filter { ids.contains($0.id) }
-        let ekCalendars = filteredCalendars.compactMap { calendarModel in
-            store.calendars(for: .event).first { $0.calendarIdentifier == calendarModel.id } ??
-            store.calendars(for: .reminder).first { $0.calendarIdentifier == calendarModel.id }
-        }
-        
-        var events: [EventModel] = []
-        
-        // Fetch regular events
-        if hasAccess(to: .event) {
-            let eventCalendars = ekCalendars.filter { store.calendars(for: .event).contains($0) }
-            if !eventCalendars.isEmpty {
-                let predicate = store.predicateForEvents(withStart: start, end: end, calendars: eventCalendars)
-                let ekEvents = store.events(matching: predicate)
-                events.append(contentsOf: ekEvents.compactMap { EventModel(from: $0) })
-            }
-        }
-        
-        // Fetch reminders
-        if hasAccess(to: .reminder) {
-            let reminderCalendars = ekCalendars.filter { store.calendars(for: .reminder).contains($0) }
-            if !reminderCalendars.isEmpty {
-                events.append(contentsOf: try await fetchReminders(from: start, to: end, calendars: reminderCalendars))
-            }
-        }
-        
-        return events.sorted { $0.start < $1.start }
+        return try await fetchReminders(from: start, to: end, calendars: calendars)
     }
     
     private func fetchReminders(from start: Date, to end: Date, calendars: [EKCalendar]) async throws -> [EventModel] {
@@ -129,9 +130,8 @@ class CalendarService: CalendarServiceProviding {
         }
     }
     
-    func setReminderCompleted(reminderID: String, completed: Bool) async throws {
-        guard hasAccess(to: .reminder) else { throw CalendarQueryError.accessDenied }
-        guard let reminder = store.calendarItem(withIdentifier: reminderID) as? EKReminder else {
+    func complete(_ id: String, completed: Bool) throws {
+        guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else {
             throw CalendarQueryError.unavailable
         }
         reminder.isCompleted = completed

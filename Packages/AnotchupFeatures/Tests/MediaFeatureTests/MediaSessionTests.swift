@@ -10,6 +10,8 @@ private final class ControlledProvider: MediaProvider {
     var supportsFavorite = false
     var commands: [MediaCommand] = []
     var onPlay: (() async -> Void)?
+    var stopCount = 0
+    func stop() { stopCount += 1 }
     func play() async { commands.append(.play); await onPlay?() }
     func pause() async { commands.append(.pause) }
     func setFavorite(_ value: Bool) async { commands.append(.favorite(value)) }
@@ -114,6 +116,22 @@ final class MediaSessionTests: XCTestCase {
         XCTAssertEqual(result, .superseded)
         XCTAssertEqual(a.commands, [.play])
         XCTAssertTrue(b.commands.isEmpty)
+    }
+
+    @MainActor
+    func testProviderReplacementAndShutdownOwnStopExactlyOnce() {
+        let a = ControlledProvider(), b = ControlledProvider(), session = MediaSession()
+        session.select(a)
+        session.select(a)
+        XCTAssertEqual(a.stopCount, 0, "Selecting the active instance is not replacement")
+        session.select(b)
+        XCTAssertEqual(a.stopCount, 1)
+        XCTAssertEqual(b.stopCount, 0)
+        session.stop(); session.stop()
+        XCTAssertEqual(a.stopCount, 1)
+        XCTAssertEqual(b.stopCount, 1)
+        session.select(a)
+        XCTAssertNil(session.provider)
     }
 
     func testEqualityIncludesVolumeRateAndTimestamp() {

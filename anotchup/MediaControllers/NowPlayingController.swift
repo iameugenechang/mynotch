@@ -9,7 +9,8 @@ import AppKit
 import Combine
 import Foundation
 
-final class NowPlayingController: ObservableObject, MediaControllerProtocol {
+@MainActor
+final class NowPlayingController: ObservableObject, @preconcurrency MediaControllerProtocol {
     func updatePlaybackInfo() async {
         await fetchFavoriteStateIfSupported()
     }
@@ -34,6 +35,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
 
     func setFavorite(_ favorite: Bool) async {
+        guard !stopped else { return }
         let bundleID = playbackState.bundleIdentifier
         
         if bundleID == "com.apple.Music" {
@@ -59,11 +61,40 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         (title: String, artist: String, album: String, duration: TimeInterval, artworkData: Data?)?
 
     // MARK: - Media Remote Functions
-    private let mediaRemoteBundle: CFBundle
-    private let MRMediaRemoteSendCommandFunction: @convention(c) (Int, AnyObject?) -> Void
-    private let MRMediaRemoteSetElapsedTimeFunction: @convention(c) (Double) -> Void
-    private let MRMediaRemoteSetShuffleModeFunction: @convention(c) (Int) -> Void
-    private let MRMediaRemoteSetRepeatModeFunction: @convention(c) (Int) -> Void
+    private let mediaRemoteBundle: CFBundle?
+    private let MRMediaRemoteSendCommandFunction: (Int, AnyObject?) -> Void
+    private let MRMediaRemoteSetElapsedTimeFunction: (Double) -> Void
+    private let MRMediaRemoteSetShuffleModeFunction: (Int) -> Void
+    private let MRMediaRemoteSetRepeatModeFunction: (Int) -> Void
+    private var stopped = false
+    private var revision = UUID()
+    private var startupTask: Task<Void, Never>?
+
+    struct Commands {
+        var send: (Int, AnyObject?) -> Void
+        var seek: (Double) -> Void
+        var shuffle: (Int) -> Void
+        var repeatMode: (Int) -> Void
+    }
+    init(commands: Commands) {
+        mediaRemoteBundle = nil
+        MRMediaRemoteSendCommandFunction = commands.send
+        MRMediaRemoteSetElapsedTimeFunction = commands.seek
+        MRMediaRemoteSetShuffleModeFunction = commands.shuffle
+        MRMediaRemoteSetRepeatModeFunction = commands.repeatMode
+    }
+
+    func stop() {
+        guard !stopped else { return }
+        stopped = true
+        revision = UUID()
+        startupTask?.cancel()
+        streamTask?.cancel()
+        if let pipeHandler { Task { await pipeHandler.close() } }
+        if let process, process.isRunning { process.terminate() }
+        process = nil
+        pipeHandler = nil
+    }
 
     private var process: Process?
     private var pipeHandler: JSONLinesPipeHandler?
@@ -96,10 +127,11 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         MRMediaRemoteSetRepeatModeFunction = unsafeBitCast(
             MRMediaRemoteSetRepeatModePointer, to: (@convention(c) (Int) -> Void).self)
 
-        Task { await setupNowPlayingObserver() }
+        startupTask = Task { [weak self] in await self?.setupNowPlayingObserver() }
     }
 
     deinit {
+        startupTask?.cancel()
         streamTask?.cancel()
         
         if let pipeHandler = self.pipeHandler {
@@ -110,7 +142,6 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         if let process = self.process {
             if process.isRunning {
                 process.terminate()
-                process.waitUntilExit()
             }
         }
 
@@ -120,40 +151,48 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
 
     // MARK: - Protocol Implementation
     func play() async {
+        guard !stopped else { return }
         MRMediaRemoteSendCommandFunction(0, nil)
     }
 
     func pause() async {
+        guard !stopped else { return }
         MRMediaRemoteSendCommandFunction(1, nil)
     }
 
     func togglePlay() async {
+        guard !stopped else { return }
         MRMediaRemoteSendCommandFunction(2, nil)
     }
 
     func nextTrack() async {
+        guard !stopped else { return }
         MRMediaRemoteSendCommandFunction(4, nil)
     }
 
     func previousTrack() async {
+        guard !stopped else { return }
         MRMediaRemoteSendCommandFunction(5, nil)
     }
 
     func seek(to time: Double) async {
+        guard !stopped, time.isFinite, time >= 0 else { return }
         MRMediaRemoteSetElapsedTimeFunction(time)
     }
 
     func isActive() -> Bool {
-        return true
+        return !stopped
     }
     
     func toggleShuffle() async {
+        guard !stopped else { return }
         // MRMediaRemoteSendCommandFunction(6, nil)
         MRMediaRemoteSetShuffleModeFunction(playbackState.isShuffled ? 1 : 3)
         playbackState.isShuffled.toggle()
     }
     
     func toggleRepeat() async {
+        guard !stopped else { return }
         // MRMediaRemoteSendCommandFunction(7, nil)
         let newRepeatMode = (playbackState.repeatMode == .off) ? 3 : (playbackState.repeatMode.rawValue - 1)
         playbackState.repeatMode = RepeatMode(rawValue: newRepeatMode) ?? .off
@@ -161,6 +200,8 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
     
     func setVolume(_ level: Double) async {
+        guard !stopped, level.isFinite else { return }
+        let current = revision
         // MediaRemote framework doesn't provide direct volume control for the active audio session
         // As a workaround, try to control the currently active music app directly
         let clampedLevel = max(0.0, min(1.0, level))
@@ -183,11 +224,13 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
             }
         }
         
+        guard !stopped, revision == current else { return }
         playbackState.volume = clampedLevel
     }
     
     // MARK: - Setup Methods
     private func setupNowPlayingObserver() async {
+        guard !stopped, !Task.isCancelled else { return }
         let process = Process()
         guard
             let scriptURL = Bundle.main.url(forResource: "mediaremote-adapter", withExtension: "pl"),
@@ -202,7 +245,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         
         let pipeHandler = JSONLinesPipeHandler()
         process.standardOutput = await pipeHandler.getPipe()
-        
+        guard !stopped, !Task.isCancelled else { await pipeHandler.close(); return }
         self.process = process
         self.pipeHandler = pipeHandler
 
@@ -226,7 +269,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
 
     // MARK: - Update Methods
-    private func handleAdapterUpdate(_ update: NowPlayingUpdate) async {
+    func handleAdapterUpdate(_ update: NowPlayingUpdate) async {
+        guard !stopped else { return }
+        revision = UUID()
         let payload = update.payload
         let diff = update.diff ?? false
 
@@ -270,8 +315,8 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
             newPlaybackState.artwork = Data(
                 base64Encoded: artworkDataString.trimmingCharacters(in: .whitespacesAndNewlines)
             )
-        } else if !diff {
-            newPlaybackState.artwork = nil
+        } else {
+            newPlaybackState.artwork = diff ? playbackState.artwork : nil
         }
 
         if let dateString = payload.timestamp,
@@ -300,6 +345,8 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
     
      private func fetchFavoriteStateIfSupported() async {
+         guard !stopped else { return }
+         let current = revision
          let bundleID = playbackState.bundleIdentifier
         
          if bundleID == "com.apple.Music" {
@@ -316,6 +363,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
              end tell
              """
              if let result = try? await AppleScriptHelper.execute(script) {
+                 guard !stopped, revision == current, !Task.isCancelled else { return }
                  var updated = self.playbackState
                  updated.isFavorite = result.booleanValue
                  self.playbackState = updated

@@ -1,5 +1,6 @@
 {
   "README.md": ["boring.notch"],
+  "Tests/NativeAdapterContractTests.swift": ["/auth/boringNotch"],
   "docs/architecture-plan.md": ["boring.notch"],
   "docs/rename-contract.md": ["boringNotch/Shelf", "boring.notch", "/auth/boringNotch"],
   "anotchup/components/Onboarding/WelcomeView.swift": ["boring.notch"],
