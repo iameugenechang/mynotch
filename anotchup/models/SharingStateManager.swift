@@ -8,6 +8,7 @@
 import AppKit
 import Combine
 import Foundation
+import ShelfFeature
 
 extension Notification.Name {
 	static let sharingDidFinish = Notification.Name("com.anotchup.sharingDidFinish")
@@ -63,87 +64,47 @@ final class SharingStateManager: ObservableObject {
 		return delegate
 	}
 
+    func stop() {
+        let delegates = Array(activeDelegates.values)
+        delegates.forEach { $0.cancel() }
+    }
+
 	private func unregisterDelegate(id: UUID) {
 		activeDelegates.removeValue(forKey: id)
 	}
 }
 
+@MainActor
 final class SharingLifecycleDelegate: NSObject, NSSharingServiceDelegate, NSSharingServicePickerDelegate {
 	let id: UUID
-	private let onEnd: () -> Void
-	private let onBegin: () -> Void
-	private let onFinish: () -> Void
-
-	private var pickerActive = false
-	private var serviceInProgress = false
-	private var finished = false
-	private var timeoutTask: Task<Void, Never>?
+    private let interaction: ShareInteraction
 
 	init(id: UUID, onEnd: @escaping () -> Void, onBegin: @escaping () -> Void, onFinish: @escaping () -> Void) {
 		self.id = id
-		self.onEnd = onEnd
-		self.onBegin = onBegin
-		self.onFinish = onFinish
+        interaction = ShareInteraction(onBegin: onBegin, onFinish: onFinish, cleanup: onEnd)
 	}
 	
-	deinit {
-		timeoutTask?.cancel()
-	}
-
-	func markPickerBegan() {
-		guard !pickerActive else { return }
-		pickerActive = true
-		onBegin()
-	}
-
-	func markServiceBegan() {
-		guard !serviceInProgress else { return }
-		serviceInProgress = true
-		onBegin()
-		startTimeoutFallback()
-	}
-	
-	private func startTimeoutFallback() {
-		timeoutTask?.cancel()
-		timeoutTask = Task { @MainActor [weak self] in
-			try? await Task.sleep(for: .seconds(2))
-			guard let self = self, !Task.isCancelled else { return }
-			if !self.finished {
-				self.finishIfNeeded()
-			}
-		}
-	}
-
-	private func finishIfNeeded() {
-		guard !finished else { return }
-		finished = true
-		timeoutTask?.cancel()
-		onFinish()
-		onEnd()
-	}
+    func markPickerBegan() { interaction.beginPicker() }
+    func markServiceBegan() { interaction.beginService() }
+    func cancel() { interaction.finish() }
+    private func finishIfNeeded() { interaction.finish() }
 
 	// MARK: - NSSharingServicePickerDelegate
 
 	func sharingServicePicker(_ sharingServicePicker: NSSharingServicePicker, didChoose service: NSSharingService?) {
 		if service == nil {
-			if pickerActive && !serviceInProgress {
-				finishIfNeeded()
-			}
+            interaction.pickerCanceled()
 			return
 		}
 
 		service?.delegate = self
-		serviceInProgress = true
-		startTimeoutFallback()
+        interaction.beginService()
 	}
 
 	// MARK: - NSSharingServiceDelegate
 
 	func sharingService(_ sharingService: NSSharingService, willShareItems items: [Any]) {
-		if !pickerActive && !serviceInProgress {
-			onBegin()
-		}
-		serviceInProgress = true
+        interaction.beginService()
 	}
 
 	func sharingService(_ sharingService: NSSharingService, didShareItems items: [Any]) {

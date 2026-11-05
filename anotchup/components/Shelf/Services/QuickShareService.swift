@@ -22,9 +22,6 @@ class QuickShareService: ObservableObject {
     @Published var availableProviders: [QuickShareProvider] = []
     @Published var isPickerOpen = false
     private var cachedServices: [String: NSSharingService] = [:]
-    // Hold security-scoped URLs during sharing
-    private var sharingAccessingURLs: [URL] = []
-    private var lifecycleDelegate: SharingLifecycleDelegate?
    
     init() {
         Task {
@@ -110,19 +107,14 @@ class QuickShareService: ObservableObject {
     
     // MARK: - Sharing
     @MainActor
-    func shareFilesOrText(_ items: [Any], using provider: QuickShareProvider, from view: NSView?) async {
+    func shareFilesOrText(_ items: [Any], using provider: QuickShareProvider, from view: NSView?, temporaryFiles: [URL] = []) async {
         let fileURLs = items.compactMap { $0 as? URL }.filter { $0.isFileURL }
-        // Stop any previous sharing access
-        stopSharingAccessingURLs()
-        // Start security-scoped access for all file URLs
-        sharingAccessingURLs = fileURLs.filter { $0.startAccessingSecurityScopedResource() }
-
-        // Setup lifecycle delegate to keep notch open during picker/service
-        let delegate = SharingStateManager.shared.makeDelegate { [weak self] in
-            self?.lifecycleDelegate = nil
-            self?.stopSharingAccessingURLs()
+        let accessingURLs = fileURLs.filter { $0.startAccessingSecurityScopedResource() }
+        // Each operation retains its own access and temporary files until completion.
+        let delegate = SharingStateManager.shared.makeDelegate {
+            accessingURLs.forEach { $0.stopAccessingSecurityScopedResource() }
+            temporaryFiles.forEach { TemporaryFileStorageService.shared.removeTemporaryFileIfNeeded(at: $0) }
         }
-        lifecycleDelegate = delegate
 
         if let svc = cachedServices[provider.id], svc.canPerform(withItems: items) {
             // For direct service path, explicitly mark service interaction start
@@ -135,17 +127,12 @@ class QuickShareService: ObservableObject {
             delegate.markPickerBegan()
             if let view {
                 picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
+            } else {
+                delegate.cancel()
             }
         }
     }
 
-    private func stopSharingAccessingURLs() {
-        NSLog("Stopping sharing access to URLs")
-        for url in sharingAccessingURLs {
-            url.stopAccessingSecurityScopedResource()
-        }
-        sharingAccessingURLs.removeAll()
-    }
 // MARK: - SharingServiceDelegate
 
 private class SharingServiceDelegate: NSObject {}
@@ -171,8 +158,7 @@ private class SharingServiceDelegate: NSObject {}
                 await shareFilesOrText([text], using: shareProvider, from: view)
             } else {
                 if let tempTextURL = await TemporaryFileStorageService.shared.createTempFile(for: .text(text)) {
-                    await shareFilesOrText([tempTextURL], using: shareProvider, from: view)
-                    TemporaryFileStorageService.shared.removeTemporaryFileIfNeeded(at: tempTextURL)
+                    await shareFilesOrText([tempTextURL], using: shareProvider, from: view, temporaryFiles: [tempTextURL])
                 } else {
                     await shareFilesOrText([text], using: shareProvider, from: view)
                 }

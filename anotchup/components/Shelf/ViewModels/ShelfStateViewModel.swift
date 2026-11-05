@@ -6,16 +6,17 @@
 
 import Foundation
 import AppKit
+import Combine
+import ShelfFeature
 
 @MainActor
 final class ShelfStateViewModel: ObservableObject {
-    static let shared = ShelfStateViewModel()
-
-    @Published private(set) var items: [ShelfItem] = [] {
-        didSet { ShelfPersistenceService.shared.save(items) }
-    }
-
-    @Published var isLoading: Bool = false
+    static let shared = makeAppShelfState()
+    private let collection: ShelfCollection<ShelfItem>
+    private var observation: AnyCancellable?
+    var items: [ShelfItem] { collection.items }
+    var isLoading: Bool { collection.isLoading }
+    var persistenceError: String? { collection.error }
 
     var isEmpty: Bool { items.isEmpty }
 
@@ -23,35 +24,31 @@ final class ShelfStateViewModel: ObservableObject {
     private var pendingBookmarkUpdates: [ShelfItem.ID: Data] = [:]
     private var updateTask: Task<Void, Never>?
 
-    private init() {
-        items = ShelfPersistenceService.shared.load()
+    init(persistence: ShelfPersistenceService) {
+        collection = ShelfCollection(load: persistence.load, save: persistence.save,
+            identity: { $0.identityKey }, cleanup: { $0.cleanupStoredData() })
+        observation = collection.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+    }
+
+    func stop() {
+        updateTask?.cancel()
+        updateTask = nil
+        pendingBookmarkUpdates.removeAll()
+        collection.stop()
     }
 
 
     func add(_ newItems: [ShelfItem]) {
-        guard !newItems.isEmpty else { return }
-        var merged = items
-        // Deduplicate by identityKey while preserving order (existing first)
-        var seen: Set<String> = Set(merged.map { $0.identityKey })
-        for it in newItems {
-            let key = it.identityKey
-            if !seen.contains(key) {
-                merged.append(it)
-                seen.insert(key)
-            }
-        }
-        items = merged
+        collection.add(newItems)
     }
 
     func remove(_ item: ShelfItem) {
-        item.cleanupStoredData()
-        items.removeAll { $0.id == item.id }
+        collection.remove(id: item.id)
     }
 
     func updateBookmark(for item: ShelfItem, bookmark: Data) {
-        guard let idx = items.firstIndex(where: { $0.id == item.id }) else { return }
-        if case .file = items[idx].kind {
-            items[idx].kind = .file(bookmark: bookmark)
+        collection.update(id: item.id) {
+            if case .file = $0.kind { $0.kind = .file(bookmark: bookmark) }
         }
     }
 
@@ -63,12 +60,11 @@ final class ShelfStateViewModel: ObservableObject {
         updateTask = Task { @MainActor [weak self] in
             await Task.yield()
             
-            guard let self = self else { return }
-            
+            guard let self, !Task.isCancelled else { return }
+
             for (itemID, bookmarkData) in self.pendingBookmarkUpdates {
-                if let idx = self.items.firstIndex(where: { $0.id == itemID }),
-                   case .file = self.items[idx].kind {
-                    self.items[idx].kind = .file(bookmark: bookmarkData)
+                self.collection.update(id: itemID) {
+                    if case .file = $0.kind { $0.kind = .file(bookmark: bookmarkData) }
                 }
             }
             
@@ -79,34 +75,18 @@ final class ShelfStateViewModel: ObservableObject {
 
     func load(_ providers: [NSItemProvider]) {
         guard !providers.isEmpty else { return }
-        isLoading = true
         Task { [weak self] in
-            let dropped = await ShelfDropService.items(from: providers)
-            await MainActor.run {
-                self?.add(dropped)
-                self?.isLoading = false
-            }
+            await self?.collection.importItems { await ShelfDropService.items(from: providers) }
         }
     }
 
     func cleanupInvalidItems() {
         Task { [weak self] in
             guard let self else { return }
-            var keep: [ShelfItem] = []
-            for item in self.items {
-                switch item.kind {
-                case .file(let data):
-                    let bookmark = Bookmark(data: data)
-                    if await bookmark.validate() {
-                        keep.append(item)
-                    } else {
-                        item.cleanupStoredData()
-                    }
-                default:
-                    keep.append(item)
-                }
+            await self.collection.validate { item in
+                if case .file(let data) = item.kind { return await Bookmark(data: data).validate() }
+                return true
             }
-            await MainActor.run { self.items = keep }
         }
     }
 

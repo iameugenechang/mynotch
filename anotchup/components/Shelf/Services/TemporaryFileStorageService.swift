@@ -17,6 +17,20 @@ enum TempFileType {
 
 class TemporaryFileStorageService {
     static let shared = TemporaryFileStorageService()
+    let root: URL
+    private let fileManager: FileManager
+
+    init(root: URL = FileManager.default.temporaryDirectory.appendingPathComponent("anotchup-shelf", isDirectory: true),
+         fileManager: FileManager = .default) {
+        self.root = root.standardizedFileURL
+        self.fileManager = fileManager
+    }
+
+    private func safeName(_ name: String?, fallback: String) -> String {
+        guard let name else { return fallback }
+        let leaf = (name as NSString).lastPathComponent
+        return leaf.isEmpty || leaf == "." || leaf == ".." ? fallback : leaf
+    }
     
     // MARK: - Public Interface
     
@@ -29,22 +43,23 @@ class TemporaryFileStorageService {
     }
     
     func removeTemporaryFileIfNeeded(at url: URL) {
-        let tempDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
-
-        guard url.path.hasPrefix(tempDirectory.path) else {
-            print("Attempted to remove temporary file outside temp directory: \(url.path)")
+        let owned = root.resolvingSymlinksInPath().pathComponents
+        let candidate = url.resolvingSymlinksInPath().pathComponents
+        guard url.isFileURL, candidate.count >= owned.count + 2,
+              Array(candidate.prefix(owned.count)) == owned else {
+            print("Refusing to delete a file outside owned Shelf storage: \(url.path)")
             return
         }
 
         let folderURL = url.deletingLastPathComponent()
 
         do {
-            try FileManager.default.removeItem(at: url)
+            try fileManager.removeItem(at: url)
             print("Deleted file: \(url.path)")
 
-            let contents = try FileManager.default.contentsOfDirectory(atPath: folderURL.path)
+            let contents = try fileManager.contentsOfDirectory(atPath: folderURL.path)
             if contents.isEmpty {
-                try FileManager.default.removeItem(at: folderURL)
+                try fileManager.removeItem(at: folderURL)
                 print("Folder was empty, deleted folder: \(folderURL.path)")
             } else {
                 print("Folder not deleted — it still contains \(contents.count) item(s).")
@@ -58,12 +73,12 @@ class TemporaryFileStorageService {
     // MARK: - Private Implementation
     
     private func createTempFile(for type: TempFileType) -> URL? {
-        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+        let tempDir = root
         let uuid = UUID().uuidString
-        
+
         switch type {
         case .data(let data, let suggestedName):
-            let filename = suggestedName ?? ".dat"
+            let filename = safeName(suggestedName, fallback: "data.dat")
             let dirURL = tempDir.appendingPathComponent(uuid, isDirectory: true)
             let fileURL = dirURL.appendingPathComponent(filename)
             
@@ -127,7 +142,7 @@ class TemporaryFileStorageService {
         }
     }
     func createZip(from urls: [URL], suggestedName: String? = nil) async -> URL? {
-        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+        let tempDir = root
         let uuid = UUID().uuidString
         let workingDir = tempDir.appendingPathComponent("zip_\(uuid)", isDirectory: true)
 
@@ -204,7 +219,7 @@ class TemporaryFileStorageService {
             }
         }
 
-        let archiveName = suggestedName ?? "Archive.zip"
+        let archiveName = safeName(suggestedName, fallback: "Archive.zip")
         let archiveURL = workingDir.appendingPathComponent(archiveName)
         let args = ["-r", "-q", archiveURL.path, "."]
         let ok = runZip(arguments: args, currentDirectory: workingDir)

@@ -53,6 +53,11 @@ struct AnotchupApp: App {
 }
 
 @MainActor
+func makeAppShelfState() -> ShelfStateViewModel {
+    ShelfStateViewModel(persistence: ShelfPersistenceService())
+}
+
+@MainActor
 func makeAppWebcamManager() -> WebcamManager {
     WebcamManager(device: AVCameraDevice())
 }
@@ -128,6 +133,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         MusicManager.shared.destroy()
         CalendarManager.shared.stop()
         WebcamManager.shared.shutdown()
+        ShelfStateViewModel.shared.stop()
+        SharingStateManager.shared.stop()
         cleanupDragDetectors()
         cleanupWindows()
         XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A0D00E010000000000000015 /* ShelfFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000008 /* ShelfFeature */; };
+		A0D00E010000000000000016 /* ShelfAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000009 /* ShelfAdapters */; };
 		A0D00E010000000000000014 /* CameraFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000007 /* CameraFeature */; };
 		A0D00E010000000000000013 /* CalendarFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000006 /* CalendarFeature */; };
 		A0D00E010000000000000012 /* MediaFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000005 /* MediaFeature */; };
@@ -358,6 +360,8 @@
 				A0D00E010000000000000012 /* MediaFeature in Frameworks */,
 				A0D00E010000000000000013 /* CalendarFeature in Frameworks */,
 				A0D00E010000000000000014 /* CameraFeature in Frameworks */,
+				A0D00E010000000000000015 /* ShelfFeature in Frameworks */,
+				A0D00E010000000000000016 /* ShelfAdapters in Frameworks */,
 				111BEA5F2ED07A340079DD4E /* MacroVisionKit in Frameworks */,
 				9A987A102C73CA8D005CA465 /* Collections in Frameworks */,
 				1194E8852EA57D23009C82D6 /* SkyLightWindow in Frameworks */,
@@ -832,6 +836,8 @@
 				A0D00E030000000000000005 /* MediaFeature */,
 				A0D00E030000000000000006 /* CalendarFeature */,
 				A0D00E030000000000000007 /* CameraFeature */,
+				A0D00E030000000000000008 /* ShelfFeature */,
+				A0D00E030000000000000009 /* ShelfAdapters */,
 				14D032192C68F32E0096E6A1 /* LaunchAtLogin */,
 				14D0321C2C68F3350096E6A1 /* Sparkle */,
 				B18654382C6F4990000B926A /* KeyboardShortcuts */,
@@ -1482,6 +1488,14 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A0D00E030000000000000008 /* ShelfFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ShelfFeature;
+		};
+		A0D00E030000000000000009 /* ShelfAdapters */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ShelfAdapters;
+		};
 		A0D00E030000000000000007 /* CameraFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = CameraFeature;

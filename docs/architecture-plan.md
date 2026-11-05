@@ -258,6 +258,10 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 
 `CameraFeature` owns capture-request reconciliation and coalesced authorization. The native AVFoundation adapter serializes capture mutation and cleanup. Six component tests and the unsigned Debug build pass (`/tmp/anotchup-camera-build.log`, 57 XCTest cases plus existing checks). Native camera conformance and acceptance remain open. See [the camera contract](camera-contract.md).
 
+## Shelf persistence and sharing slice
+
+`ShelfFeature` owns collection transactions, async import/validation, and sharing completion. `ShelfAdapters` stores JSON snapshots. Seven new package cases cover real/memory persistence, failed saves, corruption, concurrent validation, canceled imports, and sharing ownership. Production temporary-file tests cover isolated creation, cleanup, path traversal, and symlink refusal. `scripts/verify.sh --build` passed 64 XCTest cases plus existing suites and the unsigned Debug build (`/tmp/anotchup-shelf-sharing.log`). No picker or user bookmark was accessed. Native bookmark/item-provider conformance remains open. See [the Shelf contract](shelf-contract.md).
+
 ## Current compatibility exceptions
 
 - App bundle/preferences identity: `com.iameugenechang.mynotch`.
