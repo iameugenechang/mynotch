@@ -16,11 +16,16 @@ FORBIDDEN = re.compile(
 )
 
 
-def violations(source):
+def violations(source, source_path=None):
+    allowed_imports = ALLOWED_IMPORTS
+    # Geometry already exposes CoreGraphics value types. Import their owning module
+    # explicitly without permitting platform imports throughout the logic targets.
+    if source_path == "Sources/NotchShell/NotchGeometry.swift":
+        allowed_imports = ALLOWED_IMPORTS | {"CoreGraphics"}
     for number, line in enumerate(source.splitlines(), 1):
         code = line.split("//", 1)[0]
         imported = re.search(r"\bimport\s+(\w+)", code)
-        if imported and imported.group(1) not in ALLOWED_IMPORTS:
+        if imported and imported.group(1) not in allowed_imports:
             yield number, "platform/UI/other-component import in isolated logic"
         if FORBIDDEN.search(code):
             yield number, "concrete adapter or singleton access in isolated logic"
@@ -56,7 +61,7 @@ def main():
         if not sources:
             errors.append(f"{target} has no Swift sources")
         for path in sources:
-            for number, message in violations(path.read_text()):
+            for number, message in violations(path.read_text(), path.relative_to(PACKAGE).as_posix()):
                 errors.append(f"{path.relative_to(ROOT)}:{number}: {message}")
     for path in (ROOT / "anotchup").rglob("*.swift"):
         for number, line in enumerate(path.read_text().splitlines(), 1):

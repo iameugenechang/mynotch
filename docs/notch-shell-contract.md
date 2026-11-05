@@ -1,6 +1,6 @@
 # Notch shell contract
 
-`NotchShell` owns interaction policy, shared navigation, geometry arithmetic, and display-resource lifetimes. It lives in `Packages/AnotchupFeatures`, imports Foundation and Combine, and has no dependency on Working on or native UI services. `NotchShellAdapters` implements one-shot scheduling and notification registration ownership.
+`NotchShell` owns interaction policy, shared navigation, geometry arithmetic, and display-resource lifetimes. It lives in `Packages/AnotchupFeatures`, imports Foundation and Combine (plus CoreGraphics value types only in `NotchGeometry.swift`), and has no dependency on Working on or native UI services. `NotchShellAdapters` implements one-shot scheduling and notification registration ownership.
 
 ## Ownership
 
@@ -55,6 +55,6 @@ Tests in `Packages/AnotchupFeatures/Tests/NotchShellTests` use public imports, w
 
 Three navigation cases cover close-default precedence, transfer in either native callback order, and removal/canceled requests. Three presentation cases cover drag, resize, preview lane replacement, and teardown.
 
-Four display/geometry cases and two real notification-adapter cases cover reconciliation, selection/lock policy, navigation/lifetime composition, notification delivery, and observer teardown. These 37 shell cases require no windows, camera/media services, or desktop interaction. Most use manual time; the real-adapter cases use bounded asynchronous waits. They do not prove exact timing, SwiftUI callback ordering, or native focus transfer. `scripts/verify.sh --build` also checks package boundaries, the existing Working on suites, and production app compilation.
+Four display/geometry cases and two real notification-adapter cases cover reconciliation, selection/lock policy, navigation/lifetime composition, notification delivery, and observer teardown. These 37 shell cases require no windows, camera/media services, or desktop interaction. Most use manual time; the real-adapter cases use bounded asynchronous waits. They do not prove exact timing, SwiftUI callback ordering, or native focus transfer. The normal verification suite also compiles a separate optimized AppKit geometry client to guard cross-module Release compilation. `scripts/verify.sh --build` checks Debug app compilation; `--release-build` checks Release. See [the compiler-crash investigation](release-compiler-crash.md).
 
 Still outside the automated contracts: OS-generated lifecycle events, geometry measurement, actual lock/unlock/display removal, and native window/focus composition. Tests exercise the production notification adapter and package composition, not the app delegate or SwiftUI trees. Manual acceptance should cover fast exit/reentry, reopening before a shortcut deadline, shortcut use on two displays, editor/battery/share protection, display removal/lock transitions, and focus transfer. No automated check launches the app to perform those actions.

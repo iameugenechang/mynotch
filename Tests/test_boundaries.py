@@ -11,6 +11,15 @@ class ComponentBoundaryTests(unittest.TestCase):
         source = "import Foundation\nimport Combine\nlet clock: () -> Date\n// UserDefaults is an adapter"
         self.assertEqual(list(rules["violations"](source)), [])
 
+    def test_geometry_import_exception_is_file_scoped(self):
+        geometry = "Sources/NotchShell/NotchGeometry.swift"
+        self.assertEqual(list(rules["violations"]("import CoreGraphics", geometry)), [])
+        for path in [None, "Sources/WorkingOn/NotchGeometry.swift",
+                     "Sources/NotchShell/NotchDisplayLifecycle.swift"]:
+            self.assertTrue(list(rules["violations"]("import CoreGraphics", path)))
+        for source in ["import AppKit", "import SwiftUI", "let store = Thing.shared"]:
+            self.assertTrue(list(rules["violations"](source, geometry)))
+
     def test_forbidden_logic(self):
         for source in ["import SwiftUI", "import AppKit", "import WorkingOnAdapters",
                        "import NotchShell", "import NotchShellAdapters", "import WorkingOn",

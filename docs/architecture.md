@@ -4,7 +4,7 @@ The feature implementation and automated contract-test work in [the plan](archit
 
 ## Dependency direction
 
-`Packages/AnotchupFeatures` has no external dependencies. Each logic target imports only Foundation/Combine and has no dependency on a sibling feature. Adapter targets depend on their own logic. Swift target boundaries and `scripts/check-boundaries.py` enforce this direction.
+`Packages/AnotchupFeatures` has no external dependencies. Logic targets import Foundation/Combine, with one file-scoped CoreGraphics exception for `NotchGeometry.swift`, and have no dependency on a sibling feature. The explicit geometry import avoids a [Release compiler crash](release-compiler-crash.md); it adds no native effects. Adapter targets depend on their own logic. Swift target boundaries and `scripts/check-boundaries.py` enforce this direction.
 
 | Component | Owns | Contract |
 | --- | --- | --- |
@@ -29,16 +29,17 @@ Cancellation has two meanings: reusable cancellation discards pending work; term
 
 ## Verification
 
-Run `scripts/verify.sh` for all background checks, or `scripts/verify.sh --build` to include the unsigned Debug app build. Run `scripts/test-native-contracts.sh` for native adapter fixtures alone. These commands do not launch the app, request permissions, play sound, contact external players, or migrate actual user preferences.
+Run `scripts/verify.sh` for all background checks, `scripts/verify.sh --build` to include the unsigned Debug app build, or `scripts/verify.sh --release-build` for the unsigned Release build. Run `scripts/test-native-contracts.sh` for native adapter fixtures alone. These commands do not launch the app, request permissions, play sound, contact external players, or migrate actual user preferences.
 
 The automated coverage includes:
 
 - 79 public-API XCTest cases across feature logic, persistence/scheduler conformance, display/editor composition, notification delivery, and migration.
 - The retained 499 behavior, contract, presentation/media, and offscreen renderer assertions/checks. The package's original aggregate cases contain part of this count; these are not 499 additional XCTest cases.
 - 52 production native-adapter checks using controlled transports, real temporary bookmarks, and in-process item providers.
-- Four boundary-rule and five identity Python tests, 39 workflow utility tests, Shelf directory migration/temporary-storage checks, project validation, and whitespace checks.
+- An optimized, cross-module AppKit geometry consumer, which catches a compiler failure that Foundation-only package tests miss.
+- Five boundary-rule and five identity Python tests, 39 workflow utility tests, Shelf directory migration/temporary-storage checks, project validation, and whitespace checks.
 
-`scripts/verify.sh --build` passed with Xcode 27.2 (27B52), including the unsigned Debug build. Built app and embedded helper identifiers were checked as `com.iameugenechang.anotchup` and `com.iameugenechang.anotchup.AnotchupXPCHelper`. Release and signed runtime builds were not tested.
+`scripts/verify.sh --build` passed with Xcode 27.2 (27B52), including the unsigned Debug build. Built app and embedded helper identifiers were checked as `com.iameugenechang.anotchup` and `com.iameugenechang.anotchup.AnotchupXPCHelper`. A subsequent clean Release build and full suite also passed after the explicit geometry import. An ad-hoc signed Release build passed, but signed-helper and other native runtime acceptance were not tested.
 
 Tests use isolated preferences and temporary files. Live effect defaults fail closed in the native runner. Package tests use public imports rather than `@testable`. Fixture conformance proves translation and ownership behavior, not that a third-party service still honors its protocol.
 

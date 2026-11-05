@@ -37,7 +37,7 @@ The project, source paths, app-owned types, and XPC helper now use anotchup name
 
 ## Checks
 
-Run `scripts/verify.sh` for component, adapter-contract, boundary, identity/migration, workflow, layout, and offscreen renderer checks. Add `--build` to also compile the unsigned app. Checks use isolated preferences, do not launch the app, and never send input, change app focus, or play sounds.
+Run `scripts/verify.sh` for component, adapter-contract, boundary, identity/migration, workflow, layout, and offscreen renderer checks. Add `--build` for the unsigned Debug app build or `--release-build` for Release. The default checks include an optimized cross-module geometry regression test. Checks use isolated preferences, do not launch the app, and never send input, change app focus, or play sounds.
 
 Feature logic and dependency-free adapters live in `Packages/AnotchupFeatures`. Run their public-API tests with `xcrun swift test --package-path Packages/AnotchupFeatures`. `scripts/test-native-contracts.sh` tests production media, calendar, camera, bookmark, and item-provider adapters with controlled transports and temporary fixtures. Native rendering stays outside the package.
 
