@@ -5,6 +5,7 @@ let package = Package(
     name: "AnotchupFeatures",
     platforms: [.macOS(.v14)],
     products: [
+        .library(name: "CameraFeature", targets: ["CameraFeature"]),
         .library(name: "CalendarFeature", targets: ["CalendarFeature"]),
         .library(name: "MediaFeature", targets: ["MediaFeature"]),
         .library(name: "NotchShell", targets: ["NotchShell"]),
@@ -13,6 +14,8 @@ let package = Package(
         .library(name: "WorkingOnAdapters", targets: ["WorkingOnAdapters"]),
     ],
     targets: [
+        .target(name: "CameraFeature"),
+        .testTarget(name: "CameraFeatureTests", dependencies: ["CameraFeature"]),
         .target(name: "CalendarFeature"),
         .testTarget(name: "CalendarFeatureTests", dependencies: ["CalendarFeature"]),
         .target(name: "MediaFeature"),

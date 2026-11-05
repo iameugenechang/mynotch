@@ -254,6 +254,10 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 
 `CalendarFeature` owns half-open local-day queries and stale-result rejection. The native facade receives its service from composition and reports failures separately from empty results. Four package cases and the unsigned build pass (`/tmp/anotchup-calendar-build.log`, 51 XCTest cases plus existing checks). Native EventKit adapter conformance remains open. See [the calendar contract](calendar-contract.md).
 
+## Camera ownership slice
+
+`CameraFeature` owns capture-request reconciliation and coalesced authorization. The native AVFoundation adapter serializes capture mutation and cleanup. Six component tests and the unsigned Debug build pass (`/tmp/anotchup-camera-build.log`, 57 XCTest cases plus existing checks). Native camera conformance and acceptance remain open. See [the camera contract](camera-contract.md).
+
 ## Current compatibility exceptions
 
 - App bundle/preferences identity: `com.iameugenechang.mynotch`.

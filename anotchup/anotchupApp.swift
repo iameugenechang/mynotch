@@ -53,6 +53,11 @@ struct AnotchupApp: App {
 }
 
 @MainActor
+func makeAppWebcamManager() -> WebcamManager {
+    WebcamManager(device: AVCameraDevice())
+}
+
+@MainActor
 func makeAppCalendarManager() -> CalendarManager {
     CalendarManager(service: CalendarService())
 }
@@ -121,6 +126,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             screenUnlockedObserver = nil
         }
         MusicManager.shared.destroy()
+        CalendarManager.shared.stop()
+        WebcamManager.shared.shutdown()
         cleanupDragDetectors()
         cleanupWindows()
         XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()

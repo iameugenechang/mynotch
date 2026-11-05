@@ -13,8 +13,6 @@ struct CameraPreviewView: View {
     @EnvironmentObject var vm: AnotchupViewModel
     @ObservedObject var webcamManager: WebcamManager
     
-    // Track if authorization request is in progress to avoid multiple requests
-    @State private var isRequestingAuthorization: Bool = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -55,7 +53,7 @@ struct CameraPreviewView: View {
     }
     
     private func handleCameraTap() {
-        if isRequestingAuthorization {
+        if webcamManager.isRequestingAuthorization {
             return // Prevent multiple authorization requests
         }
         
@@ -81,12 +79,7 @@ struct CameraPreviewView: View {
                 }
             }
         case .notDetermined:
-            isRequestingAuthorization = true
             webcamManager.checkAndRequestVideoAuthorization()
-            // Reset the request flag after a reasonable delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                isRequestingAuthorization = false
-            }
         @unknown default:
             break
         }
