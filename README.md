@@ -39,7 +39,7 @@ The project, source paths, app-owned types, and XPC helper now use anotchup name
 
 Run `scripts/verify.sh` for component, adapter-contract, boundary, identity/migration, workflow, layout, and offscreen renderer checks. Add `--build` to also compile the unsigned app. Checks use isolated preferences, do not launch the app, and never send input, change app focus, or play sounds.
 
-Working on logic/adapters and notch hover/shortcut policy live in `Packages/AnotchupFeatures`. Run their public-API tests with `xcrun swift test --package-path Packages/AnotchupFeatures`. Native presentation checks remain outside the package.
+Working on logic/adapters and notch interaction policy, lifetime ownership, and scheduling adapters live in `Packages/AnotchupFeatures`. Run their public-API tests with `xcrun swift test --package-path Packages/AnotchupFeatures`. Native presentation checks remain outside the package.
 
 Verified locally with Xcode 27.2 (27B52) and Python 3 on macOS. See the [Working on component contract](docs/working-on-contract.md) and [notch shell contract](docs/notch-shell-contract.md) for module boundaries, ownership, ordering, and cancellation guarantees.
 

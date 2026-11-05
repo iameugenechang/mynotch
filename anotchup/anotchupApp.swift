@@ -9,6 +9,7 @@ import AVFoundation
 import Combine
 import Defaults
 import KeyboardShortcuts
+import NotchShellAdapters
 import Sparkle
 import SwiftUI
 import WorkingOn
@@ -61,7 +62,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var windows: [String: NSWindow] = [:] // UUID -> NSWindow
     var viewModels: [String: AnotchupViewModel] = [:] // UUID -> AnotchupViewModel
     var window: NSWindow?
-    let vm: AnotchupViewModel = .init()
+    let vm = AnotchupViewModel(scheduler: TaskNotchDelayScheduler())
     @ObservedObject var coordinator = AnotchupViewCoordinator.shared
     var quickShareService = QuickShareService.shared
     var whatsNewWindow: NSWindow?
@@ -502,7 +503,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let uuid = screen.displayUUID else { continue }
                 
                 if windows[uuid] == nil {
-                    let viewModel = AnotchupViewModel(screenUUID: uuid)
+                    let viewModel = AnotchupViewModel(screenUUID: uuid, scheduler: TaskNotchDelayScheduler())
                     let window = createAnotchupWindow(for: screen, with: viewModel)
 
                     windows[uuid] = window

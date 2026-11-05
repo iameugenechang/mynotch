@@ -117,7 +117,8 @@ Gate: the app uses the extracted implementation, not a parallel copy. Existing b
 - [ ] Move window creation, permission prompts, and cross-feature refresh wiring out of shell logic.
 - [x] Test stale/replaced/canceled hover tickets, recreation, and independent sessions without native services.
 - [x] Move shortcut auto-close under each display owner and test its policy, stale tickets, independent deadlines, and separation from hover cancellation.
-- [ ] Test host lifecycle wiring, focus transfer, actual display removal, native shortcut task delivery, lock/unlock, and remaining teardown paths without interacting with the real desktop.
+- [x] Extract delayed-work lifetime ownership with shared real/manual scheduler contracts. Test token cancellation/release, terminal invalidation, stale delivery, independent displays, and reentrant effects.
+- [ ] Test host lifecycle-event wiring, focus transfer, actual display removal, lock/unlock, and remaining teardown paths without interacting with the real desktop. Package lifetime tests do not exercise app-delegate events or SwiftUI trees.
 
 Gate: shell tests require no camera/media service construction. One display's local events cannot corrupt another display's local state. Physical focus and camera-cutout readability remain manual acceptance items.
 
@@ -226,7 +227,17 @@ The next slice at this point was shortcut auto-close. It is recorded below; shar
 - Added six public-API shortcut contract tests. Intentional change: one display's shortcut no longer cancels another display's deadline. Tests verify component policy, not real window lifecycle or task delivery.
 - `scripts/verify.sh --build` passed 26 XCTest cases, the existing 499 assertions/checks, four boundary-rule and four identity Python tests, 39 workflow utility tests, Shelf migration tests, project/whitespace checks, and the unsigned Debug build. No app launch, installation, permission request, audio, real-user migration, or publication occurred. The existing MediaRemoteAdapter macOS 14/15 mismatch remains; signed XPC runtime behavior and native focus remain untested.
 
-Next slice: extract a testable display lifecycle owner and shared navigation/focus-transfer policy. Drag, preview, geometry, and cross-feature effects still need extraction. Do not treat the shell checklist as complete.
+The next slice was delayed-work lifetime ownership, recorded below. Shared navigation/focus transfer and host lifecycle-event wiring remain unfinished.
+
+## Delayed-work lifetime slice
+
+- Added `NotchInteractionLifetime` to `NotchShell`. It owns per-display hover and shortcut registrations, reads current state at delivery, and removes completed work before applying effects. Reentrant effects cannot erase new registrations. Reusable cancellation and terminal invalidation are separate operations.
+- Added the one-shot `NotchDelayScheduling` contract and `TaskNotchDelayScheduler` in the new `NotchShellAdapters` target. Cancellation/token release suppress pending delivery; even zero delay is deferred. Logic does not import concrete adapters or sleep directly. No external package dependencies were added.
+- App composition injects the adapter into each main-actor view model. Both hover and shortcut work now use the package owner rather than separate app-owned tasks. Callbacks capture models weakly, tokens cancel on release, and explicit destruction permanently invalidates the owner. Shared tab/focus policy and existing delay values are unchanged.
+- Added eight component lifetime tests and two shared adapter-conformance tests. Tests cover cancellation-token ownership, stale callbacks, independent displays/lanes, recreation, reentrant effects, callback/owner release, and real task delivery. Manual time handles policy cases; bounded asynchronous waits exercise the production adapter. Tests do not construct app view models or native windows.
+- `scripts/verify.sh --build` passed 36 XCTest cases, the existing 499 assertions/checks, four boundary-rule and four identity Python tests, 39 workflow utility tests, Shelf migration tests, project/whitespace checks, and the unsigned Debug build. No app launch, installation, audio, permission prompt, or desktop interaction occurred. The existing MediaRemoteAdapter macOS 14/15 warning remains. Native focus and host lifecycle-event wiring are still untested.
+
+Next slice: characterize shared navigation and editor-focus transfer, then extract that policy without changing shared tab behavior. Drag, preview, geometry, host lifecycle-event wiring, and cross-feature effects still need work. Do not treat the shell checklist as complete.
 
 ## Current compatibility exceptions
 

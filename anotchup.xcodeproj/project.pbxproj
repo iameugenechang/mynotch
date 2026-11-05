@@ -11,6 +11,7 @@
 		A0D00E010000000000000006 /* WorkingOn in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000001 /* WorkingOn */; };
 		A0D00E010000000000000007 /* WorkingOnAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000002 /* WorkingOnAdapters */; };
 		A0D00E010000000000000008 /* NotchShell in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000003 /* NotchShell */; };
+		A0D00E010000000000000011 /* NotchShellAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000004 /* NotchShellAdapters */; };
 		A0D00E010000000000000001 /* OneGoalPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000001 /* OneGoalPresentation.swift */; };
 		A0D00E010000000000000003 /* OneGoalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000003 /* OneGoalViews.swift */; };
 		1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */; };
@@ -350,6 +351,7 @@
 				A0D00E010000000000000006 /* WorkingOn in Frameworks */,
 				A0D00E010000000000000007 /* WorkingOnAdapters in Frameworks */,
 				A0D00E010000000000000008 /* NotchShell in Frameworks */,
+				A0D00E010000000000000011 /* NotchShellAdapters in Frameworks */,
 				111BEA5F2ED07A340079DD4E /* MacroVisionKit in Frameworks */,
 				9A987A102C73CA8D005CA465 /* Collections in Frameworks */,
 				1194E8852EA57D23009C82D6 /* SkyLightWindow in Frameworks */,
@@ -820,6 +822,7 @@
 				A0D00E030000000000000001 /* WorkingOn */,
 				A0D00E030000000000000002 /* WorkingOnAdapters */,
 				A0D00E030000000000000003 /* NotchShell */,
+				A0D00E030000000000000004 /* NotchShellAdapters */,
 				14D032192C68F32E0096E6A1 /* LaunchAtLogin */,
 				14D0321C2C68F3350096E6A1 /* Sparkle */,
 				B18654382C6F4990000B926A /* KeyboardShortcuts */,
@@ -1479,6 +1482,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A0D00E040000000000000001 /* XCLocalSwiftPackageReference "AnotchupFeatures" */;
 			productName = WorkingOnAdapters;
+		};
+		A0D00E030000000000000004 /* NotchShellAdapters */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0D00E040000000000000001 /* XCLocalSwiftPackageReference "AnotchupFeatures" */;
+			productName = NotchShellAdapters;
 		};
 		A0D00E030000000000000003 /* NotchShell */ = {
 			isa = XCSwiftPackageProductDependency;

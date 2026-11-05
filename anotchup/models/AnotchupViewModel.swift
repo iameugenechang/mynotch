@@ -8,8 +8,10 @@
 import Combine
 import Defaults
 import NotchShell
+import NotchShellAdapters
 import SwiftUI
 
+@MainActor
 class AnotchupViewModel: NSObject, ObservableObject {
     @ObservedObject var coordinator = AnotchupViewCoordinator.shared
     @ObservedObject var detector = FullscreenMediaDetector.shared
@@ -19,11 +21,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
 
     @Published var contentType: ContentType = .normal
     @Published private(set) var notchState: NotchState = .closed
-    // Separate hover and shortcut lanes per display. Hover tasks stay in
-    // ContentView; synchronous model transitions invalidate both lanes.
-    var hoverSession = NotchDelayedActionSession()
-    private var shortcutSession = NotchDelayedActionSession()
-    private var shortcutCloseTask: Task<Void, Never>?
+    let interactions: NotchInteractionLifetime
 
     @Published var dragDetectorTargeting: Bool = false
     @Published var generalDropTargeting: Bool = false
@@ -48,17 +46,20 @@ class AnotchupViewModel: NSObject, ObservableObject {
     @Published var isCameraExpanded: Bool = false
     @Published var isRequestingAuthorization: Bool = false
     
-    deinit {
-        destroy()
-    }
-
+    // Subscription and scheduler tokens also cancel on release. Explicit removal
+    // invalidates the owner so retained native callbacks cannot restart its work.
     func destroy() {
-        cancelDelayedInteractions()
+        interactions.invalidate()
         cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
     }
 
-    init(screenUUID: String? = nil) {
+    convenience init(screenUUID: String? = nil) {
+        self.init(screenUUID: screenUUID, scheduler: TaskNotchDelayScheduler())
+    }
+
+    init(screenUUID: String? = nil, scheduler: any NotchDelayScheduling) {
+        interactions = NotchInteractionLifetime(scheduler: scheduler)
         animation = animationLibrary.animation
 
         super.init()
@@ -198,10 +199,7 @@ class AnotchupViewModel: NSObject, ObservableObject {
     }
 
     func cancelDelayedInteractions() {
-        hoverSession.cancel()
-        shortcutSession.cancel()
-        shortcutCloseTask?.cancel()
-        shortcutCloseTask = nil
+        interactions.cancelAll()
     }
 
     private var closeInteractionState: NotchInteractionState {
@@ -219,14 +217,11 @@ class AnotchupViewModel: NSObject, ObservableObject {
             return
         }
         open()
-        let ticket = shortcutSession.schedule(.shortcutClose)
-        shortcutCloseTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .seconds(3)) } catch { return }
-            guard !Task.isCancelled, let self else { return }
-            let effect = self.shortcutSession.fire(ticket, state: self.closeInteractionState)
-            self.shortcutCloseTask = nil
-            if effect == .close { self.close() }
-        }
+        interactions.schedule(.shortcutClose, after: .seconds(3), state: { [weak self] in
+            self?.closeInteractionState ?? NotchInteractionState(isOpen: false)
+        }, apply: { [weak self] effect in
+            if effect == .close { self?.close() }
+        })
     }
 
     func open() {

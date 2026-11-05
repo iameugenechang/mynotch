@@ -31,7 +31,6 @@ struct ContentView: View {
     @Default(.oneGoalTextPadding) private var oneGoalTextPadding
     @Default(.oneGoalTimerStyle) private var oneGoalTimerStyle
     @Default(.oneGoalVerticalOffset) private var oneGoalVerticalOffset
-    @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var isHoveringGoalControl = false
     @State private var isPointerInsideNotch = false
@@ -653,31 +652,38 @@ struct ContentView: View {
     }
 
     private func cancelHoverInteraction() {
-        vm.hoverSession.cancel()
-        hoverTask?.cancel()
-        hoverTask = nil
+        vm.interactions.cancel(.hover)
     }
 
     private func scheduleHover(_ request: NotchDelayedActionSession.Request, after delay: Duration) {
-        cancelHoverInteraction()
-        let ticket = vm.hoverSession.schedule(request)
-        hoverTask = Task { @MainActor in
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled else { return }
-            let effect = vm.hoverSession.fire(ticket, state: interactionState)
-            hoverTask = nil
+        // Capture state locations, not the whole view and its owning model.
+        let hovering = $isHovering
+        let goalHovering = $isHoveringGoalControl
+        let animation = animationSpring
+        vm.interactions.schedule(request, after: delay, state: { [weak vm, weak coordinator] in
+            guard let vm else { return NotchInteractionState(isOpen: false) }
+            return NotchInteractionState(
+                isOpen: vm.notchState == .open,
+                isHovering: hovering.wrappedValue,
+                isHoveringGoalControl: goalHovering.wrappedValue,
+                isPreviewVisible: coordinator?.sneakPeek.show ?? false,
+                opensOnHover: Defaults[.openNotchOnHover],
+                isBatteryPopoverActive: vm.isBatteryPopoverActive,
+                isSharing: SharingStateManager.shared.preventNotchClose,
+                isEditorActive: vm.isGoalEditorActive
+            )
+        }, apply: { [weak vm] effect in
+            guard let vm else { return }
             switch effect {
             case .open:
-                doOpen()
+                withAnimation(animation) { vm.open() }
             case .close:
                 vm.close()
             case .endHover(let shouldClose):
-                withAnimation(animationSpring) { isHovering = false }
+                withAnimation(animation) { hovering.wrappedValue = false }
                 if shouldClose { vm.close() }
-            case nil:
-                break
             }
-        }
+        })
     }
 
     private func handleHover(_ hovering: Bool) {

@@ -13,9 +13,10 @@ class ComponentBoundaryTests(unittest.TestCase):
 
     def test_forbidden_logic(self):
         for source in ["import SwiftUI", "import AppKit", "import WorkingOnAdapters",
-                       "import NotchShell", "import WorkingOn",
+                       "import NotchShell", "import NotchShellAdapters", "import WorkingOn",
                        "let defaults = UserDefaults.standard", "Timer()", "RunLoop.main",
-                       "RunLoopCountdownScheduler()", "let store = Thing.shared"]:
+                       "RunLoopCountdownScheduler()", "TaskNotchDelayScheduler()",
+                       "try await Task.sleep(for: .seconds(1))", "let store = Thing.shared"]:
             with self.subTest(source=source):
                 self.assertTrue(list(rules["violations"](source)))
 
@@ -24,6 +25,7 @@ class ComponentBoundaryTests(unittest.TestCase):
             {"name": "WorkingOn", "dependencies": []},
             {"name": "WorkingOnAdapters", "dependencies": [{"byName": ["WorkingOn", None]}]},
             {"name": "NotchShell", "dependencies": []},
+            {"name": "NotchShellAdapters", "dependencies": [{"byName": ["NotchShell", None]}]},
         ]}
         self.assertEqual(list(rules["graph_violations"](manifest)), [])
         reversed_graph = copy.deepcopy(manifest)
@@ -32,6 +34,9 @@ class ComponentBoundaryTests(unittest.TestCase):
         coupled_shell = copy.deepcopy(manifest)
         coupled_shell["targets"][2]["dependencies"] = [{"byName": ["WorkingOn", None]}]
         self.assertTrue(list(rules["graph_violations"](coupled_shell)))
+        wrong_adapter = copy.deepcopy(manifest)
+        wrong_adapter["targets"][3]["dependencies"] = [{"byName": ["WorkingOn", None]}]
+        self.assertTrue(list(rules["graph_violations"](wrong_adapter)))
         self.assertTrue(list(rules["graph_violations"]({"targets": []})))
 
     def test_sources_and_build_settings(self):
@@ -41,6 +46,7 @@ class ComponentBoundaryTests(unittest.TestCase):
                     {"name": "WorkingOn", "dependencies": []},
                     {"name": "WorkingOnAdapters", "dependencies": [{"byName": ["WorkingOn", None]}]},
                     {"name": "NotchShell", "dependencies": []},
+                    {"name": "NotchShellAdapters", "dependencies": [{"byName": ["NotchShell", None]}]},
                 ]}
                 next(item for item in manifest["targets"] if item["name"] == target).update(extra)
                 self.assertTrue(list(rules["graph_violations"](manifest)))
