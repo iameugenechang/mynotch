@@ -26,6 +26,7 @@ class ComponentBoundaryTests(unittest.TestCase):
             {"name": "WorkingOnAdapters", "dependencies": [{"byName": ["WorkingOn", None]}]},
             {"name": "NotchShell", "dependencies": []},
             {"name": "NotchShellAdapters", "dependencies": [{"byName": ["NotchShell", None]}]},
+            {"name": "MediaFeature", "dependencies": []},
         ]}
         self.assertEqual(list(rules["graph_violations"](manifest)), [])
         reversed_graph = copy.deepcopy(manifest)
@@ -47,6 +48,7 @@ class ComponentBoundaryTests(unittest.TestCase):
                     {"name": "WorkingOnAdapters", "dependencies": [{"byName": ["WorkingOn", None]}]},
                     {"name": "NotchShell", "dependencies": []},
                     {"name": "NotchShellAdapters", "dependencies": [{"byName": ["NotchShell", None]}]},
+                    {"name": "MediaFeature", "dependencies": []},
                 ]}
                 next(item for item in manifest["targets"] if item["name"] == target).update(extra)
                 self.assertTrue(list(rules["graph_violations"](manifest)))

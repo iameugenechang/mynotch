@@ -7,6 +7,7 @@
 import AppKit
 import Combine
 import Defaults
+import MediaFeature
 import SwiftUI
 
 let defaultImage: NSImage = .init(
@@ -14,11 +15,16 @@ let defaultImage: NSImage = .init(
     accessibilityDescription: "Album Art"
 )!
 
+@MainActor
 class MusicManager: ObservableObject {
     // MARK: - Properties
-    static let shared = MusicManager()
+    static let shared = makeAppMusicManager()
     private var cancellables = Set<AnyCancellable>()
-    private var controllerCancellables = Set<AnyCancellable>()
+    private let session = MediaSession()
+    private let providerFactory: (MediaControllerType, Bool) -> (any MediaControllerProtocol)?
+    private let onPlaybackActivity: () -> Void
+    private var startupTask: Task<Void, Never>?
+    private var lyricsTask: Task<Void, Never>?
     private var debounceIdleTask: Task<Void, Never>?
 
     // Helper to check if macOS has removed support for NowPlayingController
@@ -26,7 +32,7 @@ class MusicManager: ObservableObject {
     private let mediaChecker = MediaChecker()
 
     // Active controller
-    private var activeController: (any MediaControllerProtocol)?
+    private var activeController: (any MediaControllerProtocol)? { session.provider }
 
     // Published properties for UI
     @Published var songTitle: String = "I'm Handsome"
@@ -47,7 +53,6 @@ class MusicManager: ObservableObject {
     @Published var repeatMode: RepeatMode = .off
     @Published var volume: Double = 0.5
     @Published var volumeControlSupported: Bool = true
-    @ObservedObject var coordinator = AnotchupViewCoordinator.shared
     @Published var usingAppIconForArtwork: Bool = false
     @Published var currentLyrics: String = ""
     @Published var isFetchingLyrics: Bool = false
@@ -70,7 +75,13 @@ class MusicManager: ObservableObject {
     private var transitionWorkItem: DispatchWorkItem?
 
     // MARK: - Initialization
-    init() {
+    init(providerFactory: @escaping (MediaControllerType, Bool) -> (any MediaControllerProtocol)?,
+         onPlaybackActivity: @escaping () -> Void) {
+        self.providerFactory = providerFactory
+        self.onPlaybackActivity = onPlaybackActivity
+        session.$state.compactMap { $0 }.sink { [weak self] state in
+            self?.updateFromPlaybackState(state)
+        }.store(in: &cancellables)
         // Listen for changes to the default controller preference
         NotificationCenter.default.publisher(for: Notification.Name.mediaControllerChanged)
             .sink { [weak self] _ in
@@ -91,7 +102,8 @@ class MusicManager: ObservableObject {
             .store(in: &cancellables)
 
         // Initialize deprecation check asynchronously
-        Task { @MainActor in
+        startupTask = Task { @MainActor [weak self] in
+            guard let self else { return }
             do {
                 self.isNowPlayingDeprecated = try await self.mediaChecker.checkDeprecationStatus()
                 print("Deprecation check completed: \(self.isNowPlayingDeprecated)")
@@ -101,64 +113,34 @@ class MusicManager: ObservableObject {
             }
             
             // Initialize the active controller after deprecation check
+            guard !Task.isCancelled else { return }
             self.setActiveControllerBasedOnPreference()
         }
     }
 
     deinit {
-        destroy()
+        startupTask?.cancel()
+        lyricsTask?.cancel()
+        debounceIdleTask?.cancel()
+        flipWorkItem?.cancel()
+        transitionWorkItem?.cancel()
     }
     
     public func destroy() {
         debounceIdleTask?.cancel()
         cancellables.removeAll()
-        controllerCancellables.removeAll()
+        startupTask?.cancel()
+        lyricsTask?.cancel()
+        session.stop()
         flipWorkItem?.cancel()
         transitionWorkItem?.cancel()
 
-        // Release active controller
-        activeController = nil
+        // Session stop releases the provider and rejects queued deliveries.
     }
 
     // MARK: - Setup Methods
     private func createController(for type: MediaControllerType) -> (any MediaControllerProtocol)? {
-        // Cleanup previous controller
-        if activeController != nil {
-            controllerCancellables.removeAll()
-            activeController = nil
-        }
-
-        let newController: (any MediaControllerProtocol)?
-
-        switch type {
-        case .nowPlaying:
-            // Only create NowPlayingController if not deprecated on this macOS version
-            if !self.isNowPlayingDeprecated {
-                newController = NowPlayingController()
-            } else {
-                return nil
-            }
-        case .appleMusic:
-            newController = AppleMusicController()
-        case .spotify:
-            newController = SpotifyController()
-        case .youtubeMusic:
-            newController = YouTubeMusicController()
-        }
-
-        // Set up state observation for the new controller
-        if let controller = newController {
-            controller.playbackStatePublisher
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] state in
-                    guard let self = self,
-                          self.activeController === controller else { return }
-                    self.updateFromPlaybackState(state)
-                }
-                .store(in: &controllerCancellables)
-        }
-
-        return newController
+        providerFactory(type, isNowPlayingDeprecated)
     }
 
     private func setActiveControllerBasedOnPreference() {
@@ -183,7 +165,12 @@ class MusicManager: ObservableObject {
         flipWorkItem?.cancel()
 
         // Set new active controller
-        activeController = controller
+        lyricsTask?.cancel()
+        currentLyrics = ""
+        syncedLyrics = []
+        isFetchingLyrics = false
+        hasCurrentTrack = false
+        session.select(controller)
         
         self.canFavoriteTrack = controller.supportsFavorite
 
@@ -343,9 +330,12 @@ class MusicManager: ObservableObject {
         guard canFavoriteTrack else { return }
         guard let controller = activeController else { return }
 
-        Task { @MainActor in
-            await controller.setFavorite(favorite)
+        let revision = session.revision
+        Task { @MainActor [weak self] in
+            guard let self, self.session.isCurrent(revision) else { return }
+            _ = await self.session.send(.favorite(favorite))
             try? await Task.sleep(for: .milliseconds(150))
+            guard self.session.isCurrent(revision), !Task.isCancelled else { return }
             await controller.updatePlaybackInfo()
         }
     }
@@ -357,20 +347,22 @@ class MusicManager: ObservableObject {
 
     // MARK: - Lyrics
     private func fetchLyricsIfAvailable(bundleIdentifier: String?, title: String, artist: String) {
+        lyricsTask?.cancel()
+        let revision = session.revision
+        syncedLyrics = []
         guard Defaults[.enableLyrics], !title.isEmpty else {
-            DispatchQueue.main.async {
-                self.isFetchingLyrics = false
-                self.currentLyrics = ""
-            }
+            isFetchingLyrics = false
+            currentLyrics = ""
             return
         }
 
         // Prefer native Apple Music lyrics when available
         if let bundleIdentifier = bundleIdentifier, bundleIdentifier.contains("com.apple.Music") {
-            Task { @MainActor in
+            lyricsTask = Task { @MainActor [weak self] in
+                guard let self, self.session.isCurrent(revision), !Task.isCancelled else { return }
                 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Music")
                 guard !runningApps.isEmpty else {
-                    await self.fetchLyricsFromWeb(title: title, artist: artist)
+                    await self.fetchLyricsFromWeb(title: title, artist: artist, revision: revision)
                     return
                 }
 
@@ -400,6 +392,7 @@ class MusicManager: ObservableObject {
                     end tell
                     """
                     if let result = try await AppleScriptHelper.execute(script), let lyricsString = result.stringValue, !lyricsString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        guard self.session.isCurrent(revision), !Task.isCancelled else { return }
                         self.currentLyrics = lyricsString.trimmingCharacters(in: .whitespacesAndNewlines)
                         self.isFetchingLyrics = false
                         self.syncedLyrics = []
@@ -408,13 +401,14 @@ class MusicManager: ObservableObject {
                 } catch {
                     // fall through to web lookup
                 }
-                await self.fetchLyricsFromWeb(title: title, artist: artist)
+                await self.fetchLyricsFromWeb(title: title, artist: artist, revision: revision)
             }
         } else {
-            Task { @MainActor in
+            lyricsTask = Task { @MainActor [weak self] in
+                guard let self, self.session.isCurrent(revision), !Task.isCancelled else { return }
                 self.isFetchingLyrics = true
                 self.currentLyrics = ""
-                await self.fetchLyricsFromWeb(title: title, artist: artist)
+                await self.fetchLyricsFromWeb(title: title, artist: artist, revision: revision)
             }
         }
     }
@@ -426,7 +420,8 @@ class MusicManager: ObservableObject {
     }
 
     @MainActor
-    private func fetchLyricsFromWeb(title: String, artist: String) async {
+    private func fetchLyricsFromWeb(title: String, artist: String, revision: MediaSession.Revision) async {
+        guard session.isCurrent(revision), !Task.isCancelled else { return }
         let cleanTitle = normalizedQuery(title)
         let cleanArtist = normalizedQuery(artist)
         guard let encodedTitle = cleanTitle.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
@@ -445,6 +440,7 @@ class MusicManager: ObservableObject {
         }
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
+            guard session.isCurrent(revision), !Task.isCancelled else { return }
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 self.currentLyrics = ""
                 self.isFetchingLyrics = false
@@ -469,6 +465,7 @@ class MusicManager: ObservableObject {
                 self.syncedLyrics = []
             }
         } catch {
+            guard session.isCurrent(revision), !Task.isCancelled else { return }
             self.currentLyrics = ""
             self.isFetchingLyrics = false
             self.syncedLyrics = []
@@ -538,13 +535,15 @@ class MusicManager: ObservableObject {
     }
 
     private func updateArtwork(_ artworkData: Data) {
+        let revision = session.revision
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
             if let artworkImage = NSImage(data: artworkData) {
                 DispatchQueue.main.async { [weak self] in
-                    self?.usingAppIconForArtwork = false
-                    self?.updateAlbumArt(newAlbumArt: artworkImage)
+                    guard let self, self.session.isCurrent(revision) else { return }
+                    self.usingAppIconForArtwork = false
+                    self.updateAlbumArt(newAlbumArt: artworkImage)
                 }
             }
         }
@@ -589,90 +588,45 @@ class MusicManager: ObservableObject {
     }
 
     func calculateAverageColor() {
+        let revision = session.revision
         albumArt.averageColor { [weak self] color in
             DispatchQueue.main.async {
+                guard let self, self.session.isCurrent(revision) else { return }
                 withAnimation(.smooth) {
-                    self?.avgColor = color ?? .white
+                    self.avgColor = color ?? .white
                 }
             }
         }
     }
 
     private func updateSneakPeek() {
-        if isPlaying && Defaults[.enableSneakPeek] {
-            if Defaults[.sneakPeekStyles] == .standard {
-                coordinator.toggleSneakPeek(status: true, type: .music)
-            } else {
-                coordinator.toggleExpandingView(status: true, type: .music)
-            }
-        }
+        if isPlaying { onPlaybackActivity() }
     }
 
     // MARK: - Public Methods for controlling playback
-    func playPause() {
-        Task {
-            await activeController?.togglePlay()
+    private func submit(_ command: MediaCommand) {
+        let revision = session.revision
+        Task { [weak self] in
+            guard let self, self.session.isCurrent(revision) else { return }
+            _ = await self.session.send(command)
         }
     }
-
-    func play() {
-        Task {
-            await activeController?.play()
-        }
-    }
-
-    func pause() {
-        Task {
-            await activeController?.pause()
-        }
-    }
-
-    func toggleShuffle() {
-        Task {
-            await activeController?.toggleShuffle()
-        }
-    }
-
-    func toggleRepeat() {
-        Task {
-            await activeController?.toggleRepeat()
-        }
-    }
-    
-    func togglePlay() {
-        Task {
-            await activeController?.togglePlay()
-        }
-    }
-
-    func nextTrack() {
-        Task {
-            await activeController?.nextTrack()
-        }
-    }
-
-    func previousTrack() {
-        Task {
-            await activeController?.previousTrack()
-        }
-    }
-
-    func seek(to position: TimeInterval) {
-        Task {
-            await activeController?.seek(to: position)
-        }
-    }
+    func playPause() { submit(.togglePlay) }
+    func play() { submit(.play) }
+    func pause() { submit(.pause) }
+    func toggleShuffle() { submit(.toggleShuffle) }
+    func toggleRepeat() { submit(.toggleRepeat) }
+    func togglePlay() { submit(.togglePlay) }
+    func nextTrack() { submit(.next) }
+    func previousTrack() { submit(.previous) }
+    func seek(to position: TimeInterval) { submit(.seek(position)) }
     func skip(seconds: TimeInterval) {
         let newPos = min(max(0, elapsedTime + seconds), songDuration)
         seek(to: newPos)
     }
     
     func setVolume(to level: Double) {
-        if let controller = activeController {
-            Task {
-                await controller.setVolume(level)
-            }
-        }
+        submit(.volume(level))
     }
     func openMusicApp() {
         guard let bundleID = bundleIdentifier else {
@@ -696,16 +650,8 @@ class MusicManager: ObservableObject {
     }
 
     func forceUpdate() {
-        // Request immediate update from the active controller
-        Task { [weak self] in
-            if self?.activeController?.isActive() == true {
-                if let youtubeController = self?.activeController as? YouTubeMusicController {
-                    await youtubeController.pollPlaybackState()
-                } else {
-                    await self?.activeController?.updatePlaybackInfo()
-                }
-            }
-        }
+        guard activeController?.isActive() == true else { return }
+        submit(.refresh)
     }
     
     

@@ -5,12 +5,15 @@ let package = Package(
     name: "AnotchupFeatures",
     platforms: [.macOS(.v14)],
     products: [
+        .library(name: "MediaFeature", targets: ["MediaFeature"]),
         .library(name: "NotchShell", targets: ["NotchShell"]),
         .library(name: "NotchShellAdapters", targets: ["NotchShellAdapters"]),
         .library(name: "WorkingOn", targets: ["WorkingOn"]),
         .library(name: "WorkingOnAdapters", targets: ["WorkingOnAdapters"]),
     ],
     targets: [
+        .target(name: "MediaFeature"),
+        .testTarget(name: "MediaFeatureTests", dependencies: ["MediaFeature"]),
         .target(name: "NotchShell"),
         .target(name: "NotchShellAdapters", dependencies: ["NotchShell"]),
         .testTarget(name: "NotchShellTests", dependencies: ["NotchShell", "NotchShellAdapters"]),

@@ -52,6 +52,27 @@ struct AnotchupApp: App {
     }
 }
 
+/// Native media construction and cross-feature effects stay at composition.
+@MainActor
+func makeAppMusicManager() -> MusicManager {
+    MusicManager(providerFactory: { type, deprecated in
+        switch type {
+        case .nowPlaying: return deprecated ? nil : NowPlayingController()
+        case .appleMusic: return AppleMusicController()
+        case .spotify: return SpotifyController()
+        case .youtubeMusic: return YouTubeMusicController()
+        }
+    }, onPlaybackActivity: {
+        guard Defaults[.enableSneakPeek] else { return }
+        let coordinator = AnotchupViewCoordinator.shared
+        if Defaults[.sneakPeekStyles] == .standard {
+            coordinator.toggleSneakPeek(status: true, type: .music)
+        } else {
+            coordinator.toggleExpandingView(status: true, type: .music)
+        }
+    })
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     // App-owned feature instance, shared by every display's view tree.
     private let goalStore = OneGoalStore(

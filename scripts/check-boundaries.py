@@ -8,7 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "Packages/AnotchupFeatures"
-LOGIC_TARGETS = ("WorkingOn", "NotchShell")
+LOGIC_TARGETS = ("WorkingOn", "NotchShell", "MediaFeature")
 ALLOWED_IMPORTS = {"Foundation", "Combine"}
 FORBIDDEN = re.compile(
     r"\b(UserDefaults|Timer|RunLoop|UserDefaultsOneGoalPersistence|RunLoopCountdownScheduler|TaskNotchDelayScheduler)\b"
@@ -29,7 +29,7 @@ def violations(source):
 def graph_violations(manifest):
     targets = {target["name"]: target for target in manifest["targets"]}
     expected = {"WorkingOn": [], "WorkingOnAdapters": ["WorkingOn"],
-                "NotchShell": [], "NotchShellAdapters": ["NotchShell"]}
+                "NotchShell": [], "NotchShellAdapters": ["NotchShell"], "MediaFeature": []}
     for name, dependencies in expected.items():
         target = targets.get(name)
         if target is None:
@@ -62,12 +62,12 @@ def main():
             code = line.split("//", 1)[0]
             if re.search(r"\bOneGoalStore\s*\.\s*shared\b", code):
                 errors.append(f"{path.relative_to(ROOT)}:{number}: inject the app-owned Working on store")
-            if re.search(r"\b(class|struct|enum|protocol)\s+(OneGoal|OneGoalStore|OneGoalEditorSession|OneGoalPersistence|CountdownScheduling|NotchInteractionState|NotchDelayedActionSession|NotchInteractionLifetime|NotchDelayScheduling)\b", code):
+            if re.search(r"\b(class|struct|enum|protocol)\s+(OneGoal|OneGoalStore|OneGoalEditorSession|OneGoalPersistence|CountdownScheduling|NotchInteractionState|NotchDelayedActionSession|NotchInteractionLifetime|NotchDelayScheduling|NotchNavigation|NotchTab|MediaSession|MediaProvider|PlaybackState|MediaVisibilityPolicy)\b", code):
                 errors.append(f"{path.relative_to(ROOT)}:{number}: use the package implementation, not an app copy")
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("Working on and notch shell package/source boundary checks passed")
+    print("Feature package/source boundary checks passed")
     return 0
 
 

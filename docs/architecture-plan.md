@@ -125,8 +125,8 @@ Gate: shell tests require no camera/media service construction. One display's lo
 
 ### 5. Extract media contracts
 
-- [ ] Define normalized state, capabilities, command results, delivery context, and provider lifecycle.
-- [ ] Inject provider construction and remove direct shell/coordinator access from media logic.
+- [x] Define normalized state, capabilities, command results, delivery context, and provider lifecycle. Legacy commands report submission, not transport success.
+- [x] Inject provider construction and remove direct shell/coordinator access from media logic.
 - [ ] Create common adapter cases with controlled transports for playback mapping, unavailable data, unsupported commands, and failures.
 - [ ] Test provider switching and late artwork/lyrics/playback results, including cancellation and teardown.
 
@@ -245,6 +245,10 @@ The next slice was delayed-work lifetime ownership, recorded below. Shared navig
 - Moved compact/expanded preview timers to independent owner lanes. Replacement, cancellation, lock/unlock, and termination reject old hide callbacks. Preview updates are atomic on the main actor. Invalid HUD notification payload types are ignored rather than force-cast.
 - Added six test cases for navigation/transfer, drag protection, resize guards, independent preview replacement, and teardown. `scripts/verify.sh --build` passed 42 XCTest cases plus the existing verification suites and unsigned Debug build. No app or native focus operation was launched.
 - Native lifecycle-event composition, geometry, camera commands, and cross-feature refresh remain in the host. The full-plan request is still in progress; these tests do not complete the shell checklist.
+
+## Media core slice
+
+`MediaFeature` now owns provider selection, playback snapshots, command/capability policy, and revision validation. App composition constructs native providers and wires preview effects. Native lyrics/artwork/color completion checks reject old revisions. Five component tests and the unsigned Debug build pass (`/tmp/anotchup-media-build.log`, 47 XCTest cases plus existing checks). Production transport conformance is not yet covered. See [the media contract](media-contract.md).
 
 ## Current compatibility exceptions
 

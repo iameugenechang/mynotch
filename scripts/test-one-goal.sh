@@ -8,7 +8,7 @@ xcrun swift test --package-path Packages/AnotchupFeatures --scratch-path "$build
 target="$(uname -m)-apple-macos14.0"
 xcrun swiftc -parse-as-library -target "$target" \
   anotchup/models/OneGoalPresentation.swift \
-  anotchup/models/PlaybackState.swift \
+  Packages/AnotchupFeatures/Sources/MediaFeature/PlaybackState.swift \
   Tests/OneGoalPresentationTests.swift \
   -o "$build_dir/OneGoalPresentationTests"
 "$build_dir/OneGoalPresentationTests"

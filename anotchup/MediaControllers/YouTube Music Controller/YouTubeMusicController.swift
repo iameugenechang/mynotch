@@ -334,6 +334,8 @@ final class YouTubeMusicController: MediaControllerProtocol {
         updateTimer = nil
     }
 
+    func refresh() async { await pollPlaybackState() }
+
     func pollPlaybackState() async {
         if !isActive() {
             return
