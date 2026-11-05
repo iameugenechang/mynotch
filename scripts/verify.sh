@@ -6,6 +6,7 @@ if [[ $# -gt 1 || ($# -eq 1 && "$1" != "--build") ]]; then
   echo "Usage: scripts/verify.sh [--build]" >&2
   exit 2
 fi
+python3 Tests/test_boundaries.py
 python3 scripts/check-boundaries.py
 scripts/test-one-goal.sh
 plutil -lint boringNotch.xcodeproj/project.pbxproj

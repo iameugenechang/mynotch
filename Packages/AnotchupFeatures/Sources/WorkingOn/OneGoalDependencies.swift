@@ -4,7 +4,7 @@ import Foundation
 /// Single-snapshot storage. Writes are immediately readable, not a disk-flush guarantee.
 /// The component owns decoding, validation, and recovery of malformed snapshots.
 @MainActor
-protocol OneGoalPersistence: AnyObject {
+public protocol OneGoalPersistence: AnyObject {
     func load() -> Data?
     func save(_ data: Data)
     func clear()
@@ -14,6 +14,6 @@ protocol OneGoalPersistence: AnyObject {
 /// The interval must be finite and positive. Retain the token to keep ticks alive.
 /// Cancel/release on the main actor; cancellation is idempotent and stops queued delivery.
 @MainActor
-protocol CountdownScheduling {
+public protocol CountdownScheduling {
     func schedule(every interval: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> AnyCancellable
 }

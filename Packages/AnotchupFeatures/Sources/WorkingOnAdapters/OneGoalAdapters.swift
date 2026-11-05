@@ -1,24 +1,27 @@
 import Combine
 import Foundation
+import WorkingOn
 
 @MainActor
-final class UserDefaultsOneGoalPersistence: OneGoalPersistence {
+public final class UserDefaultsOneGoalPersistence: OneGoalPersistence {
     // Compatibility with all existing Working on snapshots.
-    static let storageKey = "oneGoal.current"
+    public static let storageKey = "oneGoal.current"
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults) {
+    public init(defaults: UserDefaults) {
         self.defaults = defaults
     }
 
-    func load() -> Data? { defaults.data(forKey: Self.storageKey) }
-    func save(_ data: Data) { defaults.set(data, forKey: Self.storageKey) }
-    func clear() { defaults.removeObject(forKey: Self.storageKey) }
+    public func load() -> Data? { defaults.data(forKey: Self.storageKey) }
+    public func save(_ data: Data) { defaults.set(data, forKey: Self.storageKey) }
+    public func clear() { defaults.removeObject(forKey: Self.storageKey) }
 }
 
 @MainActor
-struct RunLoopCountdownScheduler: CountdownScheduling {
-    func schedule(every interval: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> AnyCancellable {
+public struct RunLoopCountdownScheduler: CountdownScheduling {
+    public init() {}
+
+    public func schedule(every interval: TimeInterval, _ action: @escaping @MainActor @Sendable () -> Void) -> AnyCancellable {
         precondition(interval > 0 && interval.isFinite)
         let timer = Timer(timeInterval: interval, repeats: true) { timer in
             Task { @MainActor in
@@ -32,7 +35,7 @@ struct RunLoopCountdownScheduler: CountdownScheduling {
     }
 }
 
-extension OneGoalStore {
+public extension OneGoalStore {
     // Compatibility constructor while callers move to explicit composition.
     static var storageKey: String { UserDefaultsOneGoalPersistence.storageKey }
 

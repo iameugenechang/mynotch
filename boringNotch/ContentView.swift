@@ -12,6 +12,8 @@ import Defaults
 import KeyboardShortcuts
 import SwiftUI
 import SwiftUIIntrospect
+import WorkingOn
+import WorkingOnAdapters
 
 @MainActor
 struct ContentView: View {
@@ -433,7 +435,7 @@ struct ContentView: View {
                     case .shelf:
                         ShelfView()
                     case .goal:
-                        OneGoalView()
+                        OneGoalView(store: goalStore)
                     }
                 }
                 .transition(

@@ -1,5 +1,6 @@
 import Defaults
 import SwiftUI
+import WorkingOn
 
 private func oneGoalPlayerTint(_ color: NSColor, enabled: Bool) -> Color {
     enabled ? Color(nsColor: color).ensureMinimumBrightness(factor: 0.6) : .gray
@@ -174,50 +175,45 @@ struct OneGoalAppearanceSettings: View {
 
 struct OneGoalView: View {
     @EnvironmentObject private var vm: BoringViewModel
-    @EnvironmentObject private var store: OneGoalStore
+    @ObservedObject private var store: OneGoalStore
+    @StateObject private var editor: OneGoalEditorSession
     @ObservedObject private var musicManager = MusicManager.shared
     @Default(.playerColorTinting) private var playerColorTinting
-    @State private var draft = ""
-    @State private var minutes = "25"
-    @State private var seconds = "00"
-    @State private var editingTime = false
-    @FocusState private var focusedField: Field?
+    @FocusState private var focusedField: OneGoalEditorSession.Field?
 
-    private enum Field: Hashable { case goal, minutes, seconds }
-
-    private var duration: Int? {
-        OneGoal.Countdown.parseDuration(minutes: minutes, seconds: seconds)
-    }
-
-    private var customDurationSelected: Bool {
-        if editingTime { return true }
-        let total = store.goal.countdown.map { Int($0.duration) } ?? duration
-        return total.map { ![900, 1500, 3000].contains($0) } ?? false
+    init(store: OneGoalStore) {
+        self.store = store
+        _editor = StateObject(wrappedValue: OneGoalEditorSession(store: store))
     }
 
     private var tint: Color {
         oneGoalPlayerTint(musicManager.avgColor, enabled: playerColorTinting)
     }
 
-    private var settingTime: Bool { editingTime || store.goal.countdown == nil }
-
     private var timerStatus: String {
         guard let countdown = store.goal.countdown else { return "Optional countdown" }
-        if editingTime { return "Set duration" }
+        if editor.editingTime { return "Set duration" }
         if countdown.isFinished { return "Finished" }
         return countdown.isPaused ? "Paused" : "Time remaining"
     }
 
     private var timerActionLabel: String {
-        if settingTime { return editingTime ? "Set timer" : "Start timer" }
-        if store.goal.countdown?.isFinished == true { return "Restart timer" }
-        return store.goal.countdown?.isPaused == true ? "Resume timer" : "Pause timer"
+        switch editor.timerAction {
+        case .start: return "Start timer"
+        case .apply: return "Set timer"
+        case .restart: return "Restart timer"
+        case .resume: return "Resume timer"
+        case .pause: return "Pause timer"
+        }
     }
 
     private var timerActionIcon: String {
-        if editingTime { return "checkmark" }
-        if store.goal.countdown?.isFinished == true { return "arrow.clockwise" }
-        return settingTime || store.goal.countdown?.isPaused == true ? "play.fill" : "pause.fill"
+        switch editor.timerAction {
+        case .apply: return "checkmark"
+        case .restart: return "arrow.clockwise"
+        case .start, .resume: return "play.fill"
+        case .pause: return "pause.fill"
+        }
     }
 
     var body: some View {
@@ -230,7 +226,7 @@ struct OneGoalView: View {
                 }
                 .foregroundStyle(.secondary)
 
-                TextField("e.g. The proposal for Maya", text: $draft)
+                TextField("e.g. The proposal for Maya", text: Binding(get: { editor.draft }, set: editor.setDraft))
                     .textFieldStyle(.plain)
                     .font(.system(size: 16, weight: .medium, design: .rounded))
                     .tint(tint)
@@ -248,13 +244,13 @@ struct OneGoalView: View {
                             .allowsHitTesting(false)
                     }
                     .contentShape(RoundedRectangle(cornerRadius: 10))
-                    .onTapGesture { focusedField = .goal }
+                    .onTapGesture { editor.requestFocus(.goal) }
 
                 Spacer(minLength: 0)
 
                 HStack(spacing: 10) {
                     Button {
-                        store.complete()
+                        editor.complete()
                         dismiss()
                     } label: {
                         Label("Done", systemImage: "checkmark.circle")
@@ -265,7 +261,7 @@ struct OneGoalView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Clear the saved text and countdown.")
-                    .disabled(store.goal.text.isEmpty && OneGoal.normalized(draft).isEmpty)
+                    .disabled(store.goal.text.isEmpty && OneGoal.normalized(editor.draft).isEmpty)
 
                     Spacer(minLength: 0)
 
@@ -295,20 +291,23 @@ struct OneGoalView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(OneGoalInputFocus(isEditing: vm.isGoalEditorActive))
         .task {
-            draft = store.goal.text
-            if let countdown = store.goal.countdown {
-                setDurationFields(countdown.duration)
-            }
+            editor.begin()
             await Task.yield()
-            if vm.isGoalEditorActive { focusedField = .goal }
+            guard !Task.isCancelled, editor.isOpen else { return }
+            if vm.isGoalEditorActive { editor.requestFocus(.goal) }
         }
         .onChange(of: vm.isGoalEditorActive) { _, active in
-            if active { focusedField = .goal }
+            if active { editor.requestFocus(.goal) }
+        }
+        .onChange(of: editor.requestedFocus) { _, field in
+            focusedField = field
+        }
+        .onChange(of: focusedField) { _, field in
+            editor.requestFocus(field)
         }
         .onDisappear {
+            editor.end()
             focusedField = nil
-            draft = ""
-            editingTime = false
             vm.isGoalEditorActive = false
         }
     }
@@ -321,23 +320,9 @@ struct OneGoalView: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 if store.goal.countdown != nil {
-                    timerIcon("arrow.counterclockwise", label: "Restart timer") {
-                        store.restartCountdown()
-                        if let countdown = store.goal.countdown {
-                            setDurationFields(countdown.duration)
-                        }
-                        editingTime = false
-                        focusedField = nil
-                    }
-                    timerIcon("xmark", label: editingTime ? "Cancel duration change" : "Clear timer") {
-                        if editingTime, let countdown = store.goal.countdown {
-                            setDurationFields(countdown.duration)
-                        } else {
-                            store.clearCountdown()
-                        }
-                        editingTime = false
-                        focusedField = nil
-                    }
+                    timerIcon("arrow.counterclockwise", label: "Restart timer", action: editor.restartCountdown)
+                    timerIcon("xmark", label: editor.editingTime ? "Cancel duration change" : "Clear timer",
+                              action: editor.cancelDurationOrClearCountdown)
                 }
             }
             .frame(height: 18)
@@ -348,7 +333,7 @@ struct OneGoalView: View {
                     .monospacedDigit()
                     .foregroundStyle(tint)
                 Spacer(minLength: 0)
-                Button(action: handleTimerAction) {
+                Button(action: editor.handleTimerAction) {
                     Image(systemName: timerActionIcon)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(tint)
@@ -358,7 +343,7 @@ struct OneGoalView: View {
                 .buttonStyle(.plain)
                 .help(timerActionLabel)
                 .accessibilityLabel(timerActionLabel)
-                .disabled(settingTime && (duration == nil || OneGoal.normalized(draft).isEmpty))
+                .disabled(editor.settingTime && !editor.canStartCountdown)
             }
             .frame(height: 34)
 
@@ -367,11 +352,9 @@ struct OneGoalView: View {
             HStack(spacing: 6) {
                 ForEach([15, 25, 50], id: \.self) { preset in
                     let selected = store.goal.countdown.map { $0.duration == TimeInterval(preset * 60) }
-                        ?? (duration == preset * 60)
+                        ?? (editor.duration == preset * 60)
                     Button {
-                        minutes = String(preset)
-                        seconds = "00"
-                        if store.goal.countdown != nil { startCountdown() }
+                        editor.selectPreset(minutes: preset)
                     } label: {
                         Text("\(preset)m")
                             .font(.system(size: 10, weight: .medium))
@@ -383,16 +366,16 @@ struct OneGoalView: View {
                     }
                     .buttonStyle(.plain)
                     .help(store.goal.countdown == nil ? "Choose \(preset) minutes" : "Restart with \(preset) minutes")
-                    .disabled(store.goal.countdown != nil && OneGoal.normalized(draft).isEmpty)
+                    .disabled(store.goal.countdown != nil && OneGoal.normalized(editor.draft).isEmpty)
                 }
-                Button(action: editCustomTime) {
+                Button(action: editor.editCustomTime) {
                     Text("Custom")
                         .font(.system(size: 9, weight: .medium))
                         .lineLimit(1)
-                        .foregroundStyle(customDurationSelected ? tint : Color.secondary)
+                        .foregroundStyle(editor.customDurationSelected ? tint : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 5)
-                        .background(customDurationSelected ? tint.opacity(0.13) : Color.white.opacity(0.04), in: Capsule())
+                        .background(editor.customDurationSelected ? tint.opacity(0.13) : Color.white.opacity(0.04), in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .help("Enter minutes and seconds")
@@ -411,9 +394,9 @@ struct OneGoalView: View {
 
     @ViewBuilder
     private var timerValue: some View {
-        if let countdown = store.goal.countdown, !editingTime {
+        if let countdown = store.goal.countdown, !editor.editingTime {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                Button(action: editCustomTime) {
+                Button(action: editor.editCustomTime) {
                     Text(countdown.remainingText(at: context.date))
                 }
                 .buttonStyle(.plain)
@@ -423,20 +406,20 @@ struct OneGoalView: View {
             }
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                TextField("min", text: $minutes)
+                TextField("min", text: Binding(get: { editor.minutes }, set: editor.setMinutes))
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
                     .focused($focusedField, equals: .minutes)
-                    .onSubmit(startCountdown)
+                    .onSubmit(editor.startCountdown)
                     .frame(width: 60)
                     .accessibilityLabel("Countdown minutes")
                     .help("Minutes, from 0 to 1440")
                 Text(":")
                     .foregroundStyle(.secondary)
-                TextField("sec", text: $seconds)
+                TextField("sec", text: Binding(get: { editor.seconds }, set: editor.setSeconds))
                     .textFieldStyle(.plain)
                     .focused($focusedField, equals: .seconds)
-                    .onSubmit(startCountdown)
+                    .onSubmit(editor.startCountdown)
                     .frame(width: 30)
                     .accessibilityLabel("Countdown seconds")
                     .help("Seconds, from 0 to 59")
@@ -444,20 +427,6 @@ struct OneGoalView: View {
             .font(.system(size: 24, weight: .medium, design: .rounded))
             .help("Minutes : seconds. From 1 second to 24 hours.")
         }
-    }
-
-    private func setDurationFields(_ value: TimeInterval) {
-        let total = Int(value)
-        minutes = String(total / 60)
-        seconds = String(format: "%02d", total % 60)
-    }
-
-    private func editCustomTime() {
-        if !editingTime, let countdown = store.goal.countdown {
-            setDurationFields(countdown.duration)
-        }
-        editingTime = true
-        focusedField = .minutes
     }
 
     private func timerIcon(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -473,32 +442,13 @@ struct OneGoalView: View {
         .accessibilityLabel(label)
     }
 
-    private func handleTimerAction() {
-        if settingTime {
-            startCountdown()
-        } else if store.goal.countdown?.isFinished == true {
-            store.restartCountdown()
-        } else if store.goal.countdown?.isPaused == true {
-            store.resumeCountdown()
-        } else {
-            store.pauseCountdown()
-        }
-    }
-
     private func save() {
-        store.save(text: draft)
+        editor.save()
         dismiss()
     }
 
-    private func startCountdown() {
-        guard let duration, !OneGoal.normalized(draft).isEmpty else { return }
-        store.save(text: draft)
-        store.startCountdown(seconds: duration)
-        editingTime = false
-        focusedField = nil
-    }
-
     private func dismiss() {
+        editor.end()
         focusedField = nil
         vm.isGoalEditorActive = false
         vm.close()

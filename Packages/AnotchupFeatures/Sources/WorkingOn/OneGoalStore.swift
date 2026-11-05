@@ -2,9 +2,9 @@ import Combine
 import Foundation
 
 @MainActor
-final class OneGoalStore: ObservableObject {
-    @Published private(set) var goal: OneGoal
-    var onCountdownFinished: (() -> Void)?
+public final class OneGoalStore: ObservableObject {
+    @Published public private(set) var goal: OneGoal
+    public var onCountdownFinished: (() -> Void)?
     private let persistence: any OneGoalPersistence
     private let scheduler: any CountdownScheduling
     private let clock: () -> Date
@@ -12,7 +12,7 @@ final class OneGoalStore: ObservableObject {
     private var monitorGeneration = UUID()
     private var monitoringEnabled = false
 
-    init(persistence: any OneGoalPersistence, scheduler: any CountdownScheduling,
+    public init(persistence: any OneGoalPersistence, scheduler: any CountdownScheduling,
          clock: @escaping () -> Date) {
         self.persistence = persistence
         self.scheduler = scheduler
@@ -35,7 +35,7 @@ final class OneGoalStore: ObservableObject {
         }
     }
 
-    func save(text: String) {
+    public func save(text: String) {
         var updated = goal
         updated.text = OneGoal.normalized(text)
         if updated.text.isEmpty {
@@ -44,12 +44,12 @@ final class OneGoalStore: ObservableObject {
         update(updated)
     }
 
-    func startCountdown(minutes: Int, now: Date? = nil) {
+    public func startCountdown(minutes: Int, now: Date? = nil) {
         guard (1...1440).contains(minutes) else { return }
         startCountdown(seconds: minutes * 60, now: now)
     }
 
-    func startCountdown(seconds: Int, now: Date? = nil) {
+    public func startCountdown(seconds: Int, now: Date? = nil) {
         guard !goal.text.isEmpty, (1...86_400).contains(seconds) else { return }
         let now = now ?? clock()
         var updated = goal
@@ -58,7 +58,7 @@ final class OneGoalStore: ObservableObject {
         update(updated)
     }
 
-    func pauseCountdown(now: Date? = nil) {
+    public func pauseCountdown(now: Date? = nil) {
         guard var countdown = goal.countdown, !countdown.isPaused, !countdown.isFinished else { return }
         let remaining = countdown.remaining(at: now ?? clock())
         guard remaining > 0 else {
@@ -71,7 +71,7 @@ final class OneGoalStore: ObservableObject {
         update(updated)
     }
 
-    func resumeCountdown(now: Date? = nil) {
+    public func resumeCountdown(now: Date? = nil) {
         guard var countdown = goal.countdown, let remaining = countdown.pausedRemaining, remaining > 0 else { return }
         countdown.deadline = (now ?? clock()).addingTimeInterval(remaining)
         countdown.pausedRemaining = nil
@@ -80,7 +80,7 @@ final class OneGoalStore: ObservableObject {
         update(updated)
     }
 
-    func restartCountdown(now: Date? = nil) {
+    public func restartCountdown(now: Date? = nil) {
         guard let countdown = goal.countdown, !goal.text.isEmpty else { return }
         var updated = goal
         updated.countdown = OneGoal.Countdown(duration: countdown.duration, deadline: (now ?? clock()).addingTimeInterval(countdown.duration))
@@ -88,7 +88,7 @@ final class OneGoalStore: ObservableObject {
     }
 
     /// One app-level monitor, independent of how many notch views are visible.
-    func startMonitoringCountdown() {
+    public func startMonitoringCountdown() {
         guard !monitoringEnabled else { return }
         monitoringEnabled = true
         // Do not chime on launch for a timer that expired while the app was off.
@@ -103,7 +103,7 @@ final class OneGoalStore: ObservableObject {
         }
     }
 
-    func stopMonitoringCountdown() {
+    public func stopMonitoringCountdown() {
         monitoringEnabled = false
         cancelCompletionMonitor()
     }
@@ -129,7 +129,7 @@ final class OneGoalStore: ObservableObject {
         }
     }
 
-    func refreshCountdown() {
+    public func refreshCountdown() {
         guard monitoringEnabled, let countdown = goal.countdown,
               !countdown.isPaused, !countdown.isFinished else { return }
         if countdown.remaining(at: clock()) <= 0 { finishCountdown() }
@@ -146,13 +146,13 @@ final class OneGoalStore: ObservableObject {
         onCountdownFinished?()
     }
 
-    func clearCountdown() {
+    public func clearCountdown() {
         var updated = goal
         updated.countdown = nil
         update(updated)
     }
 
-    func complete() {
+    public func complete() {
         update(OneGoal())
     }
 

@@ -3,26 +3,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 build_dir="$(mktemp -d "${TMPDIR:-/tmp}/anotchup-tests.XXXXXX")"
 trap 'rm -rf "$build_dir"' EXIT
+# Compile and test the same modules linked by the app. No app host or package downloads.
+xcrun swift test --package-path Packages/AnotchupFeatures --scratch-path "$build_dir/package"
 target="$(uname -m)-apple-macos14.0"
 xcrun swiftc -parse-as-library -target "$target" \
-  boringNotch/models/OneGoal.swift \
-  boringNotch/models/OneGoalStore.swift \
-  boringNotch/models/OneGoalDependencies.swift \
-  boringNotch/helpers/OneGoalAdapters.swift \
+  boringNotch/models/OneGoalPresentation.swift \
   boringNotch/models/PlaybackState.swift \
-  Tests/OneGoalTests.swift \
-  -o "$build_dir/OneGoalTests"
-"$build_dir/OneGoalTests"
+  Tests/OneGoalPresentationTests.swift \
+  -o "$build_dir/OneGoalPresentationTests"
+"$build_dir/OneGoalPresentationTests"
 xcrun swiftc -parse-as-library -target "$target" \
-  boringNotch/models/OneGoal.swift \
-  boringNotch/models/OneGoalStore.swift \
-  boringNotch/models/OneGoalDependencies.swift \
-  boringNotch/helpers/OneGoalAdapters.swift \
-  Tests/OneGoalContractTests.swift \
-  -o "$build_dir/OneGoalContractTests"
-"$build_dir/OneGoalContractTests"
-xcrun swiftc -parse-as-library -target "$target" \
-  boringNotch/models/OneGoal.swift \
+  boringNotch/models/OneGoalPresentation.swift \
   boringNotch/components/Music/MusicVisualizer.swift \
   Tests/OneGoalRendererTests.swift \
   -o "$build_dir/OneGoalRendererTests"

@@ -39,7 +39,9 @@ Source paths, internal type names, and the helper still contain legacy names. Th
 
 Run `scripts/verify.sh` for component, adapter-contract, boundary, layout, and offscreen renderer checks. Add `--build` to also compile the unsigned app. Checks use isolated preferences, do not launch the app, and never send input, change app focus, or play sounds.
 
-Verified locally with Xcode 27.2 (27B52) and Python 3 on macOS. See the [Working on component contract](docs/working-on-contract.md) for ownership, ordering, and cancellation guarantees.
+Working on logic and adapters live in `Packages/AnotchupFeatures`. Run just their public-API tests with `xcrun swift test --package-path Packages/AnotchupFeatures`. Native presentation checks remain outside the package.
+
+Verified locally with Xcode 27.2 (27B52) and Python 3 on macOS. See the [Working on component contract](docs/working-on-contract.md) for module boundaries, ownership, ordering, and cancellation guarantees.
 
 See [Working on implementation and manual checks](docs/one-goal.md). Physical readability and interactive window behavior still require manual acceptance checks.
 

@@ -1,8 +1,11 @@
 import Combine
 import Foundation
+import XCTest
+import WorkingOn
+import WorkingOnAdapters
 
 @MainActor
-private final class MemoryGoalPersistence: OneGoalPersistence {
+final class MemoryGoalPersistence: OneGoalPersistence {
     private var data: Data?
     func load() -> Data? { data }
     func save(_ data: Data) { self.data = data }
@@ -10,7 +13,7 @@ private final class MemoryGoalPersistence: OneGoalPersistence {
 }
 
 @MainActor
-private final class ManualCountdownScheduler: CountdownScheduling {
+final class ManualCountdownScheduler: CountdownScheduling {
     final class Registration {
         let action: @MainActor @Sendable () -> Void
         var active = true
@@ -34,12 +37,16 @@ private final class ManualCountdownScheduler: CountdownScheduling {
     func deliverStale(_ index: Int) { registrations[index].action() }
 }
 
-@main
-struct OneGoalContractTests {
+final class OneGoalContractTests: XCTestCase {
+    func testContracts() async {
+        await Self.runChecks()
+    }
+
     @MainActor private static var checks = 0
 
     @MainActor
-    static func main() {
+    private static func runChecks() async {
+        checks = 0
         persistenceContract(MemoryGoalPersistence())
         let suite = "anotchup.contracts.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -55,18 +62,15 @@ struct OneGoalContractTests {
         expect(UserDefaultsOneGoalPersistence(defaults: defaults).load() == Data([1, 2, 3]), "new adapter reads the same stored bytes")
 
         let manual = ManualCountdownScheduler()
-        schedulerContract(manual, advance: { manual.tick() })
-        schedulerContract(RunLoopCountdownScheduler(), advance: {
-            // Only this test process's run loop, never the app or real user input.
-            let deadline = Date().addingTimeInterval(0.12)
-            while Date() < deadline {
-                RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-            }
+        await schedulerContract(manual, advance: { manual.tick() })
+        await schedulerContract(RunLoopCountdownScheduler(), advance: {
+            // Yield the main actor so scheduled callbacks can run. No app or input events.
+            try? await Task.sleep(nanoseconds: 200_000_000)
         })
         componentContract(MemoryGoalPersistence())
         adapter.clear()
         componentContract(adapter)
-        print("Working on contracts: \(checks) checks passed")
+        print("Working on contracts: \(checks) assertions executed")
     }
 
     @MainActor
@@ -82,26 +86,26 @@ struct OneGoalContractTests {
     }
 
     @MainActor
-    private static func schedulerContract(_ scheduler: any CountdownScheduling, advance: () -> Void) {
+    private static func schedulerContract(_ scheduler: any CountdownScheduling, advance: @MainActor () async -> Void) async {
         var calls = 0
         var token: AnyCancellable? = scheduler.schedule(every: 0.02) { calls += 1 }
         expect(calls == 0, "registration never invokes its callback inline")
-        advance()
+        await advance()
         expect(calls > 0, "retained registration delivers a tick")
         let first = calls
-        advance()
+        await advance()
         expect(calls > first, "registration repeats")
         token?.cancel()
         token?.cancel()
         let cancelled = calls
-        advance()
+        await advance()
         expect(calls == cancelled, "explicit cancellation stops delivery and is idempotent")
         token = scheduler.schedule(every: 0.02) { calls += 1 }
-        advance()
+        await advance()
         expect(calls > cancelled, "a new registration works after cancellation")
         token = nil
         let released = calls
-        advance()
+        await advance()
         expect(calls == released, "releasing the token cancels delivery")
     }
 
@@ -193,8 +197,9 @@ struct OneGoalContractTests {
     }
 
     @MainActor
-    private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
+    private static func expect(_ condition: @autoclosure () -> Bool, _ message: String,
+                               file: StaticString = #filePath, line: UInt = #line) {
         checks += 1
-        guard condition() else { fatalError("Contract failed: \(message)") }
+        XCTAssertTrue(condition(), message, file: file, line: line)
     }
 }

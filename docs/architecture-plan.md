@@ -100,11 +100,11 @@ Gate: tests and unsigned app build pass; project/scheme enumeration, helper embe
 ### 3. Extract Working on as the reference component
 
 - [x] Promote existing model/store tests into explicit behavior contracts before moving logic.
-- [ ] Create the local Swift package and a Working on logic target with no SwiftUI/AppKit dependency. Separate existing native font/layout helpers from timer/text logic as needed.
+- [x] Create the local Swift package and a Working on logic target with no SwiftUI/AppKit dependency. Separate existing native font/layout helpers from timer/text logic as needed.
 - [x] Inject persistence, scheduling, time, and completion effects. Specify cancellation behavior and guard against stale callbacks. Preserve the wall-clock deadline policy.
-- [ ] Separate editor draft state from saved state and focus effects. Keep draft cancellation distinct from committed timer commands.
+- [x] Separate editor draft state from saved state and focus effects. Keep draft cancellation distinct from committed timer commands.
 - [x] Wire the production adapters at app composition; views consume injected feature state/actions.
-- [x] Test two display consumers with one service, restart/reconstruction, completion ordering, scheduler cancellation, and legacy snapshots. The automated consumers are subscribers, not live display windows; actual display composition remains untested.
+- [x] Test two display consumers with one service, restart/reconstruction, completion ordering, scheduler cancellation, and legacy snapshots. The automated consumers are subscribers and editor sessions, not live display windows; actual display composition remains untested.
 
 Gate: the app uses the extracted implementation, not a parallel copy. Existing behavior tests remain green; component tests do not import or launch the app. Run shared persistence cases against the real isolated preferences adapter and the test substitute.
 
@@ -184,9 +184,27 @@ On the request to start rearchitecture, step 1 and the dependency/lifecycle port
 - Added [Working on contracts](working-on-contract.md) and shared real/substitute conformance tests. Source-level checks are temporary guardrails until package targets enforce dependencies.
 - Before changes, `scripts/test-one-goal.sh` passed 328 model/layout and 104 renderer checks. After changes, `scripts/verify.sh --build` passed those checks plus 67 contract checks and the unsigned Debug app build. No app was launched or installed; no audio or permissions were invoked. Existing macOS 14/15 binary mismatch remains.
 
-Toolchain used: macOS with full Xcode 27.2 (27B52), its selected Swift/macOS SDK, Python 3, Bash, Git, and `plutil`. Other Xcode versions have not been verified. The full build resolves public Swift packages and may require network access. Background tests compile production sources directly and do not need package downloads or private credentials.
+Toolchain used: macOS with full Xcode 27.2 (27B52), its selected Swift/macOS SDK, Python 3, Bash, Git, and `plutil`. Other Xcode versions have not been verified. The full build resolves public Swift packages and may require network access. Background tests do not need package downloads or private credentials.
 
-Next architecture slice: introduce the local Working on logic target and test target, keeping native rendering helpers and adapters outside it. Then extract editor draft/focus state and add composition tests. The branding/automation audit and coordinated mechanical rename remain separate work; inherited publishing automation is not cleared for use.
+## Package extraction slice
+
+- Added `Packages/AnotchupFeatures` with `WorkingOn`, `WorkingOnAdapters`, and `WorkingOnTests` targets. The logic target imports only Foundation and Combine. Adapters depend on logic, not the reverse. The package has no external dependencies and uses Swift tools 5.9 with a macOS 14 minimum.
+- Moved snapshot, duration parser, state transitions, contracts, and adapters into the package. The app links both library products instead of compiling duplicate source files. Public initializers preserve the existing snapshot defaults and persisted fields. No data or app identifier changed.
+- Kept native layout and sound choices in `boringNotch/models/OneGoalPresentation.swift`. Moved layout/media checks to `Tests/OneGoalPresentationTests.swift` so the feature tests do not import app presentation code.
+- Converted behavior and adapter-contract runners to XCTest using public imports, without `@testable`. Real scheduler tests yield the main actor with asynchronous waits; blocking its executor with a nested run loop prevented callback delivery under XCTest.
+- Extended boundary checks to inspect the package graph and reject app-local copies of feature types. Added four Python test cases for the rules.
+- `scripts/verify.sh --build` passed: two XCTest cases containing 110 behavior and 67 contract assertions, 218 presentation/media checks, 104 renderer checks, four boundary-rule test cases, project validation, whitespace checks, and the unsigned Debug build. All 499 existing assertions/checks remain. No app launch, installation, audio, or permission interaction occurred.
+- The build still reports concurrency warnings in unchanged app code and the existing MediaRemoteAdapter macOS 14/15 binary mismatch. No package warnings were observed. Only Xcode 27.2 (27B52) was verified; no Release build or interactive checks were run.
+
+## Editor session slice
+
+- Added `OneGoalEditorSession` to `WorkingOn`. It owns text/duration drafts, custom-duration mode, timer action selection, and focus requests. It uses the shared store directly rather than adding another service protocol.
+- `OneGoalView(store:)` retains one session and observes the same store supplied by `ContentView`. UI labels, styling, native focus, window activation, and shell editor protection remain in the app. The initial deferred focus request now checks cancellation and session activity.
+- Preserved timer command policy: start/apply commits text; pause/resume/restart/clear do not. Cancel/disappear drops the text draft without undoing committed actions. Repeated begin calls preserve live edits; closed sessions reject late commands. Simultaneous drafts are independent and explicit saves remain last-writer-wins.
+- Added nine public-API XCTest cases, each run with memory and isolated UserDefaults persistence. These cover editor lifecycle and validation, duration controls, two sessions sharing one store/monitor, focus-request isolation, reconstruction, and editor teardown. They do not create windows or validate physical focus transfer.
+- `scripts/verify.sh --build` passed the editor tests, existing 499 assertions/checks, four boundary-rule test cases, project validation, whitespace checks, and unsigned Debug build. No app launch, installation, audio, or permission interaction occurred. The existing MediaRemoteAdapter macOS 14/15 warning remains; native focus acceptance is still manual.
+
+Next architecture slice: characterize and extract shell interaction policy, starting with editor protection and delayed-close cancellation. Keep shared navigation and per-display state explicit. The branding/automation audit and coordinated mechanical rename remain separate work; inherited publishing automation is not cleared for use.
 
 ## Current compatibility exceptions
 

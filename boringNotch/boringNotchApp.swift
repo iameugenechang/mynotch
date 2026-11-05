@@ -11,6 +11,8 @@ import Defaults
 import KeyboardShortcuts
 import Sparkle
 import SwiftUI
+import WorkingOn
+import WorkingOnAdapters
 
 @main
 struct DynamicNotchApp: App {

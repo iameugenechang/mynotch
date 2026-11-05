@@ -25,13 +25,13 @@ Physical readability still needs a person looking at the display. Offscreen geom
 
 ## Implementation and compatibility
 
-The feature was previously called One Goal. Internal `OneGoal` type names, source/test paths, and preference keys remain unchanged to keep saved data and settings compatible. Renaming the feature does not reset the text, timer, or appearance settings.
+The feature was previously called One Goal. Internal `OneGoal` type names, persisted fields, and preference keys remain unchanged. Moving the implementation into a package does not reset the text, timer, or appearance settings.
 
-- `models/OneGoal.swift` contains the Codable snapshot, duration parser, sound choices, and deterministic caption/layout rules.
-- `models/OneGoalStore.swift` owns saved-state transitions through injected persistence, scheduling, and time. `helpers/OneGoalAdapters.swift` supplies isolated-testable UserDefaults storage under the existing `oneGoal.current` key and the real run-loop scheduler. Emptying the text or choosing Done removes the key. Optional pause and handled-completion fields keep older snapshots readable.
+- `Packages/AnotchupFeatures/Sources/WorkingOn/OneGoal.swift` contains the Codable snapshot and duration parser. `boringNotch/models/OneGoalPresentation.swift` keeps sound choices and deterministic caption/layout rules in the app.
+- `Packages/AnotchupFeatures/Sources/WorkingOn/OneGoalStore.swift` owns saved-state transitions through injected persistence, scheduling, and time. `Packages/AnotchupFeatures/Sources/WorkingOnAdapters/OneGoalAdapters.swift` supplies isolated-testable UserDefaults storage under the existing `oneGoal.current` key and the real run-loop scheduler. Emptying the text or choosing Done removes the key. Optional pause and handled-completion fields keep older snapshots readable.
 - Running countdowns use a wall-clock deadline, not a decrementing counter, so sleep time is included. Paused countdowns retain their remaining duration across relaunches. Tests inject a clock without changing production timekeeping.
 - The app delegate owns one store shared across display view trees, starts monitoring at launch, and stops it at termination. The store retains a scheduler token, cancels it for paused/finished/removed timers, and rejects stale callbacks. The real adapter uses the main run loop's common modes. Completion saves the handled flag before invoking the sound callback, without promising crash-safe exactly-once audio.
-- `components/OneGoal/OneGoalViews.swift` contains the caption, timer styles, settings, and editor. `ContentView.swift` owns the shared clipping shape and stable timer-width tracking.
+- `Packages/AnotchupFeatures/Sources/WorkingOn/OneGoalEditorSession.swift` owns each editor's draft, duration fields, timer actions, and focus requests. `boringNotch/components/OneGoal/OneGoalViews.swift` renders that state and bridges native focus; it observes both the session and shared store. `boringNotch/ContentView.swift` supplies the store and owns the shared clipping shape and stable timer-width tracking.
 - `components/Music/MusicVisualizer.swift` lays out its actual AppKit layers within their current bounds. `models/PlaybackState.swift` defines the tested paused-media visibility policy.
 - Only an explicitly opened Working on editor permits its panel to become key. Hover closure stays blocked while editing; explicit dismissal releases that protection.
 - The app is named anotchup. It retains `com.iameugenechang.mynotch` and its existing helper identifier for compatibility. The upstream updater does not start. See the [architecture and implementation plan](architecture-plan.md) for the staged source and identity migration.
@@ -44,11 +44,13 @@ Run:
 scripts/verify.sh
 ```
 
-The command runs boundary checks, compiles production test sources directly with the macOS SDK, and validates the Xcode project. It needs no third-party test framework and does not build or launch the app by default. `scripts/test-one-goal.sh` remains the focused test runner.
+The command runs boundary checks, SwiftPM XCTest cases against the public package API, standalone native presentation checks, and Xcode project validation. It needs no third-party test framework or package downloads and does not build or launch the app by default. `scripts/test-one-goal.sh` remains the focused test runner. Run only the package tests with `xcrun swift test --package-path Packages/AnotchupFeatures`.
 
-`Tests/OneGoalTests.swift` checks normalization, Unicode storage, corrupt/legacy snapshots, rename compatibility, duration bounds and parsing, countdown fractions, pause/resume/restart, clearing/completion, sleep/relaunch behavior, single completion callback delivery, and the real Foundation completion scheduler. Layout checks cover collapsed, expanded, and preview footer geometry across font heights and offsets. Media checks cover the paused-player visibility policy.
+`Packages/AnotchupFeatures/Tests/WorkingOnTests/OneGoalTests.swift` checks normalization, Unicode storage, corrupt/legacy snapshots, rename compatibility, duration bounds and parsing, countdown fractions, pause/resume/restart, clearing/completion, sleep/relaunch behavior, single completion callback delivery, and the real Foundation completion scheduler. `Tests/OneGoalPresentationTests.swift` covers collapsed, expanded, and preview footer geometry across font heights and offsets, plus the paused-player visibility policy.
 
-`Tests/OneGoalContractTests.swift` runs shared persistence and scheduling cases against real adapters and test substitutes. It also checks shared subscribers, completion ordering, stale callbacks, reconstruction, and teardown. See [Working on component contracts](working-on-contract.md) for guarantees and limits.
+`Packages/AnotchupFeatures/Tests/WorkingOnTests/OneGoalContractTests.swift` runs shared persistence and scheduling cases against real adapters and test substitutes. It also checks shared subscribers, completion ordering, stale callbacks, reconstruction, and teardown. See [Working on component contracts](working-on-contract.md) for guarantees and limits.
+
+`Packages/AnotchupFeatures/Tests/WorkingOnTests/OneGoalEditorSessionTests.swift` composes real sessions with the store and both persistence adapters. It checks draft isolation, focus requests, validation, timer commit/cancel behavior, reconstruction, and editor teardown. These are component composition tests, not native window or keyboard-focus tests.
 
 `Tests/OneGoalRendererTests.swift` creates offscreen AppKit spectrum layers without windows or activation. It checks centering, clipping, resizing, paused bars, native font metrics, and sound-file loading. It never plays audio.
 

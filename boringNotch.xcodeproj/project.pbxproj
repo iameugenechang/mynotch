@@ -7,10 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A0D00E010000000000000004 /* OneGoalDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000004 /* OneGoalDependencies.swift */; };
-		A0D00E010000000000000005 /* OneGoalAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000005 /* OneGoalAdapters.swift */; };
-		A0D00E010000000000000001 /* OneGoal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000001 /* OneGoal.swift */; };
-		A0D00E010000000000000002 /* OneGoalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000002 /* OneGoalStore.swift */; };
+		A0D00E010000000000000006 /* WorkingOn in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000001 /* WorkingOn */; };
+		A0D00E010000000000000007 /* WorkingOnAdapters in Frameworks */ = {isa = PBXBuildFile; productRef = A0D00E030000000000000002 /* WorkingOnAdapters */; };
+		A0D00E010000000000000001 /* OneGoalPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000001 /* OneGoalPresentation.swift */; };
 		A0D00E010000000000000003 /* OneGoalViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D00E020000000000000003 /* OneGoalViews.swift */; };
 		1100290C2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */; };
 		110029272E84FD4C00035A57 /* TemporaryFileStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */; };
@@ -186,10 +185,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A0D00E020000000000000004 /* OneGoalDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoalDependencies.swift; sourceTree = "<group>"; };
-		A0D00E020000000000000005 /* OneGoalAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoalAdapters.swift; sourceTree = "<group>"; };
-		A0D00E020000000000000001 /* OneGoal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoal.swift; sourceTree = "<group>"; };
-		A0D00E020000000000000002 /* OneGoalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoalStore.swift; sourceTree = "<group>"; };
+		A0D00E020000000000000001 /* OneGoalPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoalPresentation.swift; sourceTree = "<group>"; };
 		A0D00E020000000000000003 /* OneGoalViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneGoal/OneGoalViews.swift; sourceTree = "<group>"; };
 		1100290B2E847E2800035A57 /* NSItemProvider+LoadHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NSItemProvider+LoadHelpers.swift"; sourceTree = "<group>"; };
 		110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryFileStorageService.swift; sourceTree = "<group>"; };
@@ -348,6 +344,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0D00E010000000000000006 /* WorkingOn in Frameworks */,
+				A0D00E010000000000000007 /* WorkingOnAdapters in Frameworks */,
 				111BEA5F2ED07A340079DD4E /* MacroVisionKit in Frameworks */,
 				9A987A102C73CA8D005CA465 /* Collections in Frameworks */,
 				1194E8852EA57D23009C82D6 /* SkyLightWindow in Frameworks */,
@@ -469,7 +467,6 @@
 				11A45C782E34E63100CEB175 /* MediaChecker.swift */,
 				1153BD972D9881F900979FB0 /* AppleScriptHelper.swift */,
 				14288DD62C6E015000B9F80C /* AudioPlayer.swift */,
-				A0D00E020000000000000005 /* OneGoalAdapters.swift */,
 				5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */,
 				14288E0B2C6F8EC000B9F80C /* AppIcons.swift */,
 			);
@@ -638,9 +635,7 @@
 		14D570C72C5F38760011E668 /* models */ = {
 			isa = PBXGroup;
 			children = (
-				A0D00E020000000000000001 /* OneGoal.swift */,
-				A0D00E020000000000000002 /* OneGoalStore.swift */,
-				A0D00E020000000000000004 /* OneGoalDependencies.swift */,
+				A0D00E020000000000000001 /* OneGoalPresentation.swift */,
 				11F748812ECB07A400F841DB /* MusicControlButton.swift */,
 				118D1FD02E98FF5F00A2FF63 /* SharingStateManager.swift */,
 				1163988E2DF5CC870052E6AF /* CalendarModel.swift */,
@@ -817,6 +812,8 @@
 			);
 			name = boringNotch;
 			packageProductDependencies = (
+				A0D00E030000000000000001 /* WorkingOn */,
+				A0D00E030000000000000002 /* WorkingOnAdapters */,
 				14D032192C68F32E0096E6A1 /* LaunchAtLogin */,
 				14D0321C2C68F3350096E6A1 /* Sparkle */,
 				B18654382C6F4990000B926A /* KeyboardShortcuts */,
@@ -863,6 +860,7 @@
 			);
 			mainGroup = 14CEF4092C5CAED200855D72;
 			packageReferences = (
+				A0D00E040000000000000001 /* XCLocalSwiftPackageReference "AnotchupFeatures" */,
 				14D032182C68F32E0096E6A1 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Modern" */,
 				14D0321B2C68F3350096E6A1 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				B18654372C6F4990000B926A /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
@@ -920,10 +918,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A0D00E010000000000000001 /* OneGoal.swift in Sources */,
-				A0D00E010000000000000002 /* OneGoalStore.swift in Sources */,
-				A0D00E010000000000000004 /* OneGoalDependencies.swift in Sources */,
-				A0D00E010000000000000005 /* OneGoalAdapters.swift in Sources */,
+				A0D00E010000000000000001 /* OneGoalPresentation.swift in Sources */,
 				A0D00E010000000000000003 /* OneGoalViews.swift in Sources */,
 				115C12EC2ED3D003009754CA /* OpenNotchHUD.swift in Sources */,
 				14C08BB92C8DE4B1000F8AA0 /* BoringCalendar.swift in Sources */,
@@ -1369,6 +1364,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		A0D00E040000000000000001 /* XCLocalSwiftPackageReference "AnotchupFeatures" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/AnotchupFeatures;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		111BE95B2ECD71E10079DD4E /* XCRemoteSwiftPackageReference "AsyncXPCConnection" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1461,6 +1463,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A0D00E030000000000000001 /* WorkingOn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0D00E040000000000000001 /* XCLocalSwiftPackageReference "AnotchupFeatures" */;
+			productName = WorkingOn;
+		};
+		A0D00E030000000000000002 /* WorkingOnAdapters */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0D00E040000000000000001 /* XCLocalSwiftPackageReference "AnotchupFeatures" */;
+			productName = WorkingOnAdapters;
+		};
 		111BE95C2ECD71E10079DD4E /* AsyncXPCConnection */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 111BE95B2ECD71E10079DD4E /* XCRemoteSwiftPackageReference "AsyncXPCConnection" */;
