@@ -8,11 +8,13 @@ publish = false
 
 [features]
 default = []
-gui = ["dep:gpui", "dep:gpui_platform", "dep:raw-window-handle", "dep:core-video", "dep:core-foundation", "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:block"]
+gui = ["dep:gpui", "dep:gpui_platform", "dep:gpui_elements", "dep:accesskit", "dep:raw-window-handle", "dep:core-video", "dep:core-foundation", "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:block"]
 
 [dependencies]
 gpui = { package = "gpui-ce", git = "https://github.com/gpui-ce/gpui-ce", rev = "81742184cb1df090709257a5e4061eba44fa8e8a", default-features = false, optional = true }
 gpui_platform = { package = "gpui_ce_platform", git = "https://github.com/gpui-ce/gpui-ce", rev = "81742184cb1df090709257a5e4061eba44fa8e8a", default-features = false, features = ["font-kit"], optional = true }
+gpui_elements = { package = "gpui_ce_elements", git = "https://github.com/gpui-ce/gpui-ce", rev = "81742184cb1df090709257a5e4061eba44fa8e8a", optional = true }
+accesskit = { version = "0.24", optional = true }
 raw-window-handle = { version = "0.6.2", optional = true }
 core-video = { version = "0.5.2", features = ["metal"], optional = true }
 core-foundation = { version = "0.10", optional = true }

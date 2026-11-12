@@ -3,24 +3,27 @@ mod native;
 use anotchup_gates::{DisplayLifetimes, Lifetime};
 use core_video::pixel_buffer::CVPixelBuffer;
 use gpui::{
-    Animation, AnimationExt, App, Bounds, Context, FocusHandle, KeyDownEvent,
-    MacosWindowBackground, ObjectFit, Render, Subscription, Window, WindowBounds, WindowKind,
-    WindowOptions, div, linear_color_stop, linear_gradient, point, prelude::*, px, rgb, rgba, size,
-    surface,
+    Animation, AnimationExt, App, Bounds, Context, Entity, Focusable, MacosWindowBackground,
+    ObjectFit, Render, Subscription, Window, WindowBounds, WindowKind, WindowOptions, div,
+    linear_color_stop, linear_gradient, point, prelude::*, px, rgb, rgba, size, surface,
+};
+use gpui_elements::editable_text::{
+    EditableTextState, StringStorage, TextChanged,
+    actions::{DEFAULT_INPUT_CONTEXT, Enter, Escape, default_bindings},
+    text_input,
 };
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 struct Gate {
     registry: Rc<RefCell<DisplayLifetimes>>,
     lifetime: Lifetime,
-    focus: FocusHandle,
+    editor: Entity<EditableTextState>,
     subscriptions: Vec<Subscription>,
     frame: CVPixelBuffer,
     phase: usize,
     mirrored: bool,
     expanded: bool,
     pulsing: bool,
-    text: String,
 }
 impl Drop for Gate {
     fn drop(&mut self) {
@@ -39,14 +42,13 @@ impl Gate {
         let mut gate = Self {
             registry,
             lifetime,
-            focus: cx.focus_handle(),
+            editor: cx.new(|cx| EditableTextState::new(StringStorage::default(), cx)),
             subscriptions: vec![],
             frame: native::frame(0, false),
             phase: 0,
             mirrored: false,
             expanded: false,
             pulsing: false,
-            text: String::new(),
         };
         gate.subscriptions
             .push(cx.observe_window_bounds(window, |_, window, _| {
@@ -74,6 +76,12 @@ impl Gate {
             })
             .detach();
         }
+        let editor = gate.editor.clone();
+        gate.subscriptions
+            .push(cx.subscribe(&editor, |_, editor, _: &TextChanged, cx| {
+                eprintln!("[text] {:?}", editor.read(cx).as_str());
+                cx.notify();
+            }));
         gate.subscriptions
             .push(cx.observe_window_activation(window, |this, window, cx| {
                 if window.is_window_active() {
@@ -81,6 +89,7 @@ impl Gate {
                 } else {
                     this.registry.borrow_mut().resigned_key(this.lifetime);
                     native::edit(window, false);
+                    window.blur(cx);
                     eprintln!("[edit] off resigned");
                 }
                 cx.notify();
@@ -127,7 +136,7 @@ impl Gate {
     }
     fn begin(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.registry.borrow_mut().begin_editing(self.lifetime) {
-            self.focus.focus(window, cx);
+            self.editor.read(cx).focus_handle(cx).focus(window, cx);
             let native = native::edit(window, true);
             eprintln!("[edit] on native={native}");
             cx.notify();
@@ -136,25 +145,8 @@ impl Gate {
     fn end(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.registry.borrow_mut().resigned_key(self.lifetime);
         native::edit(window, false);
+        window.blur(cx);
         eprintln!("[edit] off end");
-        cx.notify();
-    }
-    fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.registry.borrow().can_become_key(self.lifetime) || !native::is_editing(window) {
-            return;
-        }
-        match event.keystroke.key.as_str() {
-            "escape" | "enter" => self.end(window, cx),
-            "backspace" => {
-                self.text.pop();
-            }
-            _ => {
-                if let Some(ch) = &event.keystroke.key_char {
-                    self.text.push_str(ch);
-                }
-            }
-        }
-        eprintln!("[key] {} text={}", event.keystroke.key, self.text);
         cx.notify();
     }
 }
@@ -162,7 +154,10 @@ impl Render for Gate {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Read native state after outside-click resign; this is a keyboard probe, not an IME editor.
         let editing = native::is_editing(window);
-        div().id("gate").track_focus(&self.focus).on_key_down(cx.listener(Self::key))
+        div().id("gate")
+            // Capture phase: the field's own handlers still run afterwards.
+            .capture_action(cx.listener(|this,_:&Enter,window,cx|{eprintln!("[commit] {:?}",this.editor.read(cx).as_str());this.end(window,cx)}))
+            .capture_action(cx.listener(|this,_:&Escape,window,cx|this.end(window,cx)))
             .on_hover(|hovered,_,_|eprintln!("[hover] panel={hovered}"))
             .size_full().flex().flex_col().gap_2().p_4().text_color(rgb(0xffffff)).font_family("Helvetica Neue")
             .bg(linear_gradient(90.0,linear_color_stop(rgb(0x213554),0.0),linear_color_stop(rgb(0x752752),1.0)))
@@ -173,7 +168,12 @@ impl Render for Gate {
                 .child(div().id("edit").px_2().bg(rgb(0x456080)).cursor_pointer().child("Begin typing probe").on_click(cx.listener(|this,_,window,cx|this.begin(window,cx))))
                 .child(div().id("end").px_2().bg(rgb(0x456080)).cursor_pointer().child("End / Esc").on_click(cx.listener(|this,_,window,cx|this.end(window,cx))))
                 .child(div().id("quit").px_2().bg(rgb(0x803050)).cursor_pointer().child("Quit").on_click(|_,_,cx|cx.quit())))
-            .child(format!("Keys: {}",self.text))
+            .child(div().flex().gap_2()
+                .child("Text:")
+                // A click on the field must make the panel key before the field can take focus.
+                .child(div().id("field").capture_any_mouse_down(cx.listener(|this,_,window,cx|this.begin(window,cx)))
+                    .child(text_input("working-on").aria_label("Working on").state(self.editor.downgrade()).placeholder("Click to type").caret_blink_interval_500ms()
+                        .w(px(300.)).min_h_auto().px_1().bg(rgba(0x00000050)).whitespace_nowrap())))
             .child(div().flex().gap_4()
                 .child(div().flex_none().w(px(210.)).h(px(130.)).overflow_hidden().child(surface(self.frame.clone()).object_fit(ObjectFit::Cover).size_full()))
                 .child(div().flex_1().min_w_0().flex().flex_col().gap_3()
@@ -181,13 +181,12 @@ impl Render for Gate {
                     .child(div().bg(rgba(0xffffff30)).backdrop_blur(px(8.)).p_2().child("Backdrop fixture"))
                     .child("Video corners deliberately square: separate camera mask still open.")))
             .child(div().flex().gap_2()
-                .child(div().id("frame").px_2().bg(rgb(0x456080)).hover_style(|style|style.bg(rgb(0x9fd0ff))).cursor_pointer().child("Next frame").on_click(cx.listener(|this,_,_,cx|this.next_frame(cx))))
+                .child(div().id("frame").role(accesskit::Role::Button).aria_label("Next frame").px_2().bg(rgb(0x456080)).hover_style(|style|style.bg(rgb(0x9fd0ff))).cursor_pointer().child("Next frame").on_click(cx.listener(|this,_,_,cx|this.next_frame(cx))))
                 .child(div().id("mirror").px_2().bg(rgb(0x456080)).cursor_pointer().child(if self.mirrored {"Mirrored"} else {"Mirror"}).on_click(cx.listener(|this,_,_,cx|this.toggle_mirror(cx))))
                 .child(div().id("resize").px_2().bg(rgb(0x456080)).cursor_pointer().child("Resize").on_click(cx.listener(|this,_,window,cx|this.toggle_size(window,cx))))
                 .child(div().id("close").px_2().bg(rgb(0x456080)).cursor_pointer().child("Remove display probe").on_click(|_,window,_|window.remove_window())))
             // Scripted only: a repeating animation must keep the display link alive, then let it stop.
             .when(self.pulsing, |this| this.child(div().absolute().top(px(12.)).right(px(16.)).size(px(14.)).bg(rgb(0xffd000)).with_animation("pulse",Animation::new(Duration::from_millis(600)).repeat(),|dot,phase|dot.opacity(0.2+0.8*phase))))
-            .child("No camera, preferences, private SkyLight, or installed-app integration. IME is not implemented.")
     }
 }
 /// Timed button actions for checks that must not use the owner's input devices.
@@ -244,6 +243,7 @@ fn main() {
     let script = script.expect("validated above");
     eprintln!("[startup] entering GPUI event loop");
     gpui_platform::application().run(move |cx: &mut App| {
+        cx.bind_keys(default_bindings().as_keybindings(Some(DEFAULT_INPUT_CONTEXT)));
         let displays = cx.displays();
         eprintln!("[startup] opening probes on {} display(s)", displays.len());
         cx.on_window_closed(|cx, _| {

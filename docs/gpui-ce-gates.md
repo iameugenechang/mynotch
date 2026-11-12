@@ -130,6 +130,18 @@ Same setup, owner still away. One defect found and fixed.
 - **Pass: click burst.** 30 clicks at about 70 ms spacing after the display link had stopped produced 30 actions and the correct final frame, with focus unchanged.
 - **Pass: deferred frame wake.** With the direct restart temporarily disabled so every wake took the deferred branch, timed steps, a pulse, teardown, hover and a click all behaved the same. The temporary change was reverted.
 
+### Text input and accessibility on 2026-11-12
+
+The raw-key probe was replaced with GPUI-CE's own single-line `text_input` from `gpui_ce_elements`, at the same pinned revision. A click on the field makes the panel key, then the field takes focus. Enter and Escape are captured by the panel, which commits or cancels and gives the keyboard back. Real key events on a U.S. layout, owner away.
+
+- **Pass: typing and editing.** Typed text arrived in order. Option+Left moved by word, Cmd+A selected all, Cmd+C then Cmd+V duplicated the text, Cmd+Z undid the paste and Backspace deleted. The owner's pasteboard was saved first and restored afterwards, with an unchanged checksum.
+- **Pass: composition.** The dead keys Option+E then E produced é and Option+U then O produced ö, through a visible marked-text stage. An injected Unicode string (Japanese) was inserted intact, and a double-click selected one of its characters. This exercises the marked-text path only. No CJK input source is installed, so a real input method with a candidate window was not tested.
+- **Pass: focus handover.** Clicking the field took key status. Enter, Escape and a click on the scratch window each returned typing to the scratch field, also in a full-screen Space. Clicking a passive button or empty panel area while editing kept the field focused and still ran the button. Quitting while typing left no crash report.
+- **Pass: accessibility tree.** The system accessibility API sees the field as a text field. A button given a role and label appears as a button with that title, and an accessibility press on it ran the action and rendered the new frame without any pointer event.
+- **Cost of a blinking caret.** While the field is focused the caret's 500 ms blink keeps the display link running, at about 313 context switches per second. It returns to about 4 after leaving the field. The link runs at display rate for a twice-a-second blink, so this is wasteful, but it only applies while editing.
+
+Limits: elements get no accessibility role or label by default. A plain `div` with a click handler is invisible to assistive technology until the author adds both, so every control in the app would need them. The tree is built lazily and the first query after launch is incomplete. VoiceOver itself was not run. Selection by dragging, the candidate window of a real input method, and right-to-left text were not tested. The field has no "done editing" event; commit is the panel's own Enter handler.
+
 ## First owner check: can it sit around the physical notch?
 
 This is the first live gate, before inspecting video or blur. No software can draw on the physical camera cutout. The goal is a window that reaches the screen's top edge and surrounds or extends below that cutout, rather than being pushed underneath the menu-bar safe area.
@@ -196,6 +208,6 @@ Only after the synthetic gate: add a separately enabled AVFoundation adapter wit
 
 ## Before feature migration
 
-Do not treat this scaffold as acceptance of all three gates. Next work is to run the explicit synthetic experiment with the owner, record failures and fix the native/rendering route. Then cover actual text input/IME/accessibility, display hotplug, lock policy, status item and remaining macOS adapters. Port Working on first once the shell and input route are sound. Retain behavioral contracts from the Swift reference rather than carrying over Shelf or Lottie.
+Do not treat this scaffold as acceptance of all three gates. Next work is to run the explicit synthetic experiment with the owner, record failures and fix the native/rendering route. Text input, dead-key composition and the accessibility tree were covered on 2026-11-12. Still to cover: a real CJK input method, VoiceOver, display hotplug, lock policy, status item and remaining macOS adapters. Port Working on first once the shell and input route are sound. Retain behavioral contracts from the Swift reference rather than carrying over Shelf or Lottie.
 
 The [source audit](gpui-feasibility-audit.md) remains historical evidence for a different upstream GPUI revision. The [CE council record](gpui-ce-council.md) identifies what changed and what is still uncertain.

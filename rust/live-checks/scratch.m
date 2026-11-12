@@ -24,6 +24,27 @@ static void releaseModifiers(void) {
 static BOOL modifiersHeld(void) {
     return (CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState) & (kCGEventFlagMaskControl | kCGEventFlagMaskCommand | kCGEventFlagMaskAlternate | kCGEventFlagMaskShift)) != 0;
 }
+static void tap(CGKeyCode code, CGEventFlags flags, BOOL explicitFlags) {
+    CGEventRef d = CGEventCreateKeyboardEvent(NULL, code, true); if (explicitFlags) CGEventSetFlags(d, flags); CGEventPost(kCGHIDEventTap, d); CFRelease(d); usleep(35000);
+    CGEventRef u = CGEventCreateKeyboardEvent(NULL, code, false); if (explicitFlags) CGEventSetFlags(u, flags); CGEventPost(kCGHIDEventTap, u); CFRelease(u); usleep(35000);
+}
+// U.S. layout key codes for the characters the checks type.
+static int codeFor(unichar c) {
+    static NSDictionary *m; if (!m) m = @{@"a":@0,@"s":@1,@"d":@2,@"f":@3,@"h":@4,@"g":@5,@"z":@6,@"x":@7,@"c":@8,@"v":@9,@"b":@11,@"q":@12,@"w":@13,@"e":@14,@"r":@15,@"y":@16,@"t":@17,@"o":@31,@"u":@32,@"i":@34,@"p":@35,@"l":@37,@"j":@38,@"k":@40,@"n":@45,@"m":@46,@"_":@49,@"1":@18,@"2":@19,@"3":@20};
+    NSNumber *n = m[[NSString stringWithCharacters:&c length:1]]; return n ? n.intValue : -1;
+}
+// The whole pasteboard is saved before the first modified key and restored at exit.
+static NSArray *savedBoard;
+static void saveBoard(void) {
+    if (savedBoard) return; NSMutableArray *items = [NSMutableArray array];
+    for (NSPasteboardItem *it in NSPasteboard.generalPasteboard.pasteboardItems) { NSMutableDictionary *d = [NSMutableDictionary dictionary]; for (NSString *t in it.types) { NSData *v = [it dataForType:t]; if (v) d[t] = v; } [items addObject:d]; }
+    savedBoard = items;
+}
+static void restoreBoard(void) {
+    if (!savedBoard) return; NSPasteboard *pb = NSPasteboard.generalPasteboard; [pb clearContents]; NSMutableArray *items = [NSMutableArray array];
+    for (NSDictionary *d in savedBoard) { NSPasteboardItem *it = [NSPasteboardItem new]; for (NSString *t in d) [it setData:d[t] forType:t]; [items addObject:it]; }
+    if (items.count) [pb writeObjects:items];
+}
 static void post(CGEventType t, CGPoint p) { CGEventRef e = CGEventCreateMouseEvent(NULL, t, p, kCGMouseButtonLeft); CGEventPost(kCGHIDEventTap, e); CFRelease(e); }
 static void spin(double s) {
     NSDate *end = [NSDate dateWithTimeIntervalSinceNow:s];
@@ -94,6 +115,18 @@ int main(int argc, const char **argv) {
             // Glide the pointer from a probe point to a screen point in small steps, like a hand would.
             else if ([k isEqual:@"pglide"]) { CGPoint from = CGPointMake(b.origin.x + [a[1] doubleValue], b.origin.y + [a[2] doubleValue]), to = CGPointMake([a[3] doubleValue], [a[4] doubleValue]);
                 for (int n = 0; n <= 40; n++) { post(kCGEventMouseMoved, CGPointMake(from.x + (to.x - from.x) * n / 40, from.y + (to.y - from.y) * n / 40)); usleep(8000); } spin(0.7); }
+            // The ops below type. They run only when the scratch field or the probe's editor holds focus.
+            else if ([@[@"type", @"mkey", @"ukey"] containsObject:k] && !(scratchKey() || probeEditing())) note = @"typing SKIPPED: neither scratch nor probe editor has focus";
+            else if ([k isEqual:@"type"]) { NSString *t = a[1]; for (NSUInteger n = 0; n < t.length; n++) { int c = codeFor([t characterAtIndex:n]); if (c >= 0) tap((CGKeyCode)c, 0, NO); } spin(0.5); }
+            else if ([k isEqual:@"mkey"]) { saveBoard(); CGEventFlags f = 0; NSString *m = a[2];
+                if ([m containsString:@"c"]) f |= kCGEventFlagMaskCommand; if ([m containsString:@"s"]) f |= kCGEventFlagMaskShift; if ([m containsString:@"o"]) f |= kCGEventFlagMaskAlternate;
+                tap((CGKeyCode)[a[1] intValue], f, YES); releaseModifiers(); spin(0.5); }
+            else if ([k isEqual:@"ukey"]) { NSString *t = a[1]; unichar buf[32]; NSUInteger len = MIN(t.length, 32); [t getCharacters:buf range:NSMakeRange(0, len)];
+                CGEventRef d = CGEventCreateKeyboardEvent(NULL, 0, true); CGEventKeyboardSetUnicodeString(d, len, buf); CGEventPost(kCGHIDEventTap, d); CFRelease(d); usleep(35000);
+                CGEventRef u = CGEventCreateKeyboardEvent(NULL, 0, false); CGEventKeyboardSetUnicodeString(u, len, buf); CGEventPost(kCGHIDEventTap, u); CFRelease(u); spin(0.5); }
+            else if ([k isEqual:@"pdbl"]) { CGPoint p = CGPointMake(b.origin.x + [a[1] doubleValue], b.origin.y + [a[2] doubleValue]); post(kCGEventMouseMoved, p); spin(0.15);
+                for (int n = 1; n <= 2; n++) { CGEventRef d = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, p, kCGMouseButtonLeft); CGEventSetIntegerValueField(d, kCGMouseEventClickState, n); CGEventPost(kCGHIDEventTap, d); CFRelease(d); usleep(40000);
+                    CGEventRef u = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseUp, p, kCGMouseButtonLeft); CGEventSetIntegerValueField(u, kCGMouseEventClickState, n); CGEventPost(kCGHIDEventTap, u); CFRelease(u); usleep(60000); } spin(0.6); }
             else if ([k isEqual:@"wait"]) spin([a[1] doubleValue] / 1000.0);
             else if ([k isEqual:@"clear"]) field.stringValue = @"";
             else if ([k isEqual:@"shot"]) { NSDictionary *w = probe(NULL); if (w) system([NSString stringWithFormat:@"screencapture -x -o -l %d %s/%@.png", [w[(id)kCGWindowNumber] intValue], outDir(), a[1]].UTF8String); }
@@ -112,6 +145,7 @@ int main(int argc, const char **argv) {
         }
         releaseModifiers();
         if (full) { [win toggleFullScreen:nil]; spin(3.0); }
+        restoreBoard();
         [win close]; CGWarpMouseCursorPosition(original); [prior activateWithOptions:0]; spin(0.4);
         return 0;
     }

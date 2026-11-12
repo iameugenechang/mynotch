@@ -165,11 +165,13 @@ dependencies = [
 name = "anotchup-gates"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "block",
  "cc",
  "core-foundation",
  "core-video",
  "gpui-ce",
+ "gpui_ce_elements",
  "gpui_ce_platform",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -1949,6 +1951,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "gpui_ce_elements"
+version = "0.1.0"
+source = "git+https://github.com/gpui-ce/gpui-ce?rev=81742184cb1df090709257a5e4061eba44fa8e8a#81742184cb1df090709257a5e4061eba44fa8e8a"
+dependencies = [
+ "derive_setters",
+ "gpui-ce",
+ "palette",
+ "smallvec",
+ "unicode-segmentation",
 ]
 
 [[package]]
