@@ -3,11 +3,12 @@ mod native;
 use anotchup_gates::{DisplayLifetimes, Lifetime};
 use core_video::pixel_buffer::CVPixelBuffer;
 use gpui::{
-    App, Bounds, Context, FocusHandle, KeyDownEvent, MacosWindowBackground, ObjectFit, Render,
-    Subscription, Window, WindowBounds, WindowKind, WindowOptions, div, linear_color_stop,
-    linear_gradient, point, prelude::*, px, rgb, rgba, size, surface,
+    Animation, AnimationExt, App, Bounds, Context, FocusHandle, KeyDownEvent,
+    MacosWindowBackground, ObjectFit, Render, Subscription, Window, WindowBounds, WindowKind,
+    WindowOptions, div, linear_color_stop, linear_gradient, point, prelude::*, px, rgb, rgba, size,
+    surface,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 struct Gate {
     registry: Rc<RefCell<DisplayLifetimes>>,
@@ -18,6 +19,7 @@ struct Gate {
     phase: usize,
     mirrored: bool,
     expanded: bool,
+    pulsing: bool,
     text: String,
 }
 impl Drop for Gate {
@@ -43,6 +45,7 @@ impl Gate {
             phase: 0,
             mirrored: false,
             expanded: false,
+            pulsing: false,
             text: String::new(),
         };
         gate.subscriptions
@@ -78,6 +81,7 @@ impl Gate {
                 } else {
                     this.registry.borrow_mut().resigned_key(this.lifetime);
                     native::edit(window, false);
+                    eprintln!("[edit] off resigned");
                 }
                 cx.notify();
             }));
@@ -89,6 +93,10 @@ impl Gate {
             "frame" => self.next_frame(cx),
             "mirror" => self.toggle_mirror(cx),
             "resize" => self.toggle_size(window, cx),
+            "pulse" => {
+                self.pulsing = !self.pulsing;
+                cx.notify();
+            }
             "remove" => window.remove_window(),
             "quit" => cx.quit(),
             _ => unreachable!("steps are validated at startup"),
@@ -96,16 +104,19 @@ impl Gate {
     }
     fn next_frame(&mut self, cx: &mut Context<Self>) {
         self.phase = (self.phase + 24) % 320;
+        eprintln!("[action] frame phase={}", self.phase);
         self.frame = native::frame(self.phase, self.mirrored);
         cx.notify();
     }
     fn toggle_mirror(&mut self, cx: &mut Context<Self>) {
         self.mirrored = !self.mirrored;
+        eprintln!("[action] mirror mirrored={}", self.mirrored);
         self.frame = native::frame(self.phase, self.mirrored);
         cx.notify();
     }
     fn toggle_size(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.expanded = !self.expanded;
+        eprintln!("[action] resize expanded={}", self.expanded);
         let (width, height) = if self.expanded {
             (680., 390.)
         } else {
@@ -117,13 +128,15 @@ impl Gate {
     fn begin(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.registry.borrow_mut().begin_editing(self.lifetime) {
             self.focus.focus(window, cx);
-            native::edit(window, true);
+            let native = native::edit(window, true);
+            eprintln!("[edit] on native={native}");
             cx.notify();
         }
     }
     fn end(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.registry.borrow_mut().resigned_key(self.lifetime);
         native::edit(window, false);
+        eprintln!("[edit] off end");
         cx.notify();
     }
     fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -141,6 +154,7 @@ impl Gate {
                 }
             }
         }
+        eprintln!("[key] {} text={}", event.keystroke.key, self.text);
         cx.notify();
     }
 }
@@ -166,10 +180,12 @@ impl Render for Gate {
                     .child(div().bg(rgba(0xffffff30)).backdrop_blur(px(8.)).p_2().child("Backdrop fixture"))
                     .child("Video corners deliberately square: separate camera mask still open.")))
             .child(div().flex().gap_2()
-                .child(div().id("frame").px_2().bg(rgb(0x456080)).cursor_pointer().child("Next frame").on_click(cx.listener(|this,_,_,cx|this.next_frame(cx))))
+                .child(div().id("frame").px_2().bg(rgb(0x456080)).hover_style(|style|style.bg(rgb(0x9fd0ff))).cursor_pointer().child("Next frame").on_click(cx.listener(|this,_,_,cx|this.next_frame(cx))))
                 .child(div().id("mirror").px_2().bg(rgb(0x456080)).cursor_pointer().child(if self.mirrored {"Mirrored"} else {"Mirror"}).on_click(cx.listener(|this,_,_,cx|this.toggle_mirror(cx))))
                 .child(div().id("resize").px_2().bg(rgb(0x456080)).cursor_pointer().child("Resize").on_click(cx.listener(|this,_,window,cx|this.toggle_size(window,cx))))
                 .child(div().id("close").px_2().bg(rgb(0x456080)).cursor_pointer().child("Remove display probe").on_click(|_,window,_|window.remove_window())))
+            // Scripted only: a repeating animation must keep the display link alive, then let it stop.
+            .when(self.pulsing, |this| this.child(div().absolute().top(px(12.)).right(px(16.)).size(px(14.)).bg(rgb(0xffd000)).with_animation("pulse",Animation::new(Duration::from_millis(600)).repeat(),|dot,phase|dot.opacity(0.2+0.8*phase))))
             .child("No camera, preferences, private SkyLight, or installed-app integration. IME is not implemented.")
     }
 }
@@ -177,7 +193,7 @@ impl Render for Gate {
 #[derive(Clone)]
 struct Script {
     steps: Rc<[String]>,
-    interval: std::time::Duration,
+    interval: Duration,
 }
 impl Script {
     fn parse(args: &[String]) -> Option<Self> {
@@ -195,10 +211,10 @@ impl Script {
             }
             rest = tail;
         }
-        let known = ["frame", "mirror", "resize", "remove", "quit"];
+        let known = ["frame", "mirror", "resize", "pulse", "remove", "quit"];
         (rest.is_empty() && steps.iter().all(|step| known.contains(&step.as_str()))).then(|| Self {
             steps: steps.into(),
-            interval: std::time::Duration::from_millis(interval),
+            interval: Duration::from_millis(interval),
         })
     }
 }
@@ -217,7 +233,7 @@ fn main() {
     let script = Script::parse(&args);
     if script.is_none() {
         println!(
-            "anotchup-gates\n  --check-native  Headless ABI, block, buffer and path contracts\n  --show          Explicitly open synthetic panels on connected displays\n  --show --steps frame,mirror,resize,remove,quit [--step-ms N]\n                  Also run those button actions on a timer (no input events)\nNo installed app, user preferences, camera or permissions are accessed."
+            "anotchup-gates\n  --check-native  Headless ABI, block, buffer and path contracts\n  --show          Explicitly open synthetic panels on connected displays\n  --show --steps frame,mirror,resize,pulse,remove,quit [--step-ms N]\n                  Also run those button actions on a timer (no input events)\nNo installed app, user preferences, camera or permissions are accessed."
         );
         if !args.is_empty() {
             std::process::exit(2);

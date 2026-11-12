@@ -34,8 +34,8 @@ static void reportPlacement(NSView *view) {
     NSScreen *screen=window.screen;
     if (!screen) return;
     NSRect content=[window convertRectToScreen:[view convertRect:view.bounds toView:nil]];
-    fprintf(stderr,"[placement] screen=%s target_top=%.1f window_top=%.1f content_top=%.1f gap=%.1f\n",
-        screen.localizedName.UTF8String, NSMaxY(screen.frame), NSMaxY(window.frame),
+    fprintf(stderr,"[placement] window=%ld screen=%s target_top=%.1f window_top=%.1f content_top=%.1f gap=%.1f\n",
+        (long)window.windowNumber, screen.localizedName.UTF8String, NSMaxY(screen.frame), NSMaxY(window.frame),
         NSMaxY(content), NSMaxY(screen.frame)-NSMaxY(window.frame));
 }
 static NSView *checkedView(void *pointer) {

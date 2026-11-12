@@ -22,17 +22,27 @@ This command opens synthetic panels at the top of connected displays. Do not run
 cargo run --locked --features gui -- --show
 ```
 
-**Start with physical placement, not video.** On the built-in display, check that the large diagnostic panel sits flush with the screen's top edge, centered around the hardware cutout, rather than below the menu bar. Then check visibility over other apps, across Spaces and in full-screen, followed by passive focus. The [owner checklist](../docs/gpui-ce-gates.md#first-owner-check-can-it-sit-around-the-physical-notch) gives pass/fail conditions. Initial placement is confirmed. The live checks found failures in passive-click focus and resized rendering; hover, explicit editor entry/exit, frame anchoring and the tested full-screen stacking passed. Resized rendering has since been fixed. Passive-click focus did not reproduce in a later run and is unresolved. See the gate record for limits and remaining checks. The hardware cutout itself cannot display pixels.
+**Start with physical placement, not video.** On the built-in display, check that the large diagnostic panel sits flush with the screen's top edge, centered around the hardware cutout, rather than below the menu bar. Then check visibility over other apps, across Spaces and in full-screen, followed by passive focus. The [owner checklist](../docs/gpui-ce-gates.md#first-owner-check-can-it-sit-around-the-physical-notch) gives pass/fail conditions. Initial placement is confirmed. The live checks found failures in passive-click focus and resized rendering; hover, explicit editor entry/exit, frame anchoring and the tested full-screen stacking passed. Resized rendering has since been fixed. Passive-click focus passed in a later session on the current code; the earlier failure is unexplained. See the gate record for limits and remaining checks. The hardware cutout itself cannot display pixels.
 
 - Creates a borderless, nonactivating popup while hidden and unfocused, installs a guarded panel subclass and a native notch mask, then shows without explicit activation. It no longer changes the window style after subclassing.
 - Prints `[startup]` stages and `[placement]` coordinates. A process that stays alive without `probe ready` has not completed setup; AppKit exceptions may appear only in the macOS unified log.
 - Begin typing probe permits key status. End, Enter, Escape, and native focus loss end editing. This is a raw-key probe, not a text editor: no selection, composition, IME, clipboard, or accessibility parity is claimed.
 - Next frame changes a synthetic asymmetric NV12 frame; Mirror reverses luminance pixels and chroma pairs before upload. `ObjectFit::Cover` does not clip, so the surface sits in a fixed-size `overflow_hidden` box that crops it. There is no camera, repeating frame producer, or audio.
-- Resize changes the panel dimensions and rebuilds the outer mask. The native frame change is deferred to the next main-queue turn, so GPUI receives the new viewport. `--show --steps frame,mirror,resize,remove,quit` runs those button actions on a timer (`--step-ms N` sets the interval), for checks that must not send input events. The green strip and gradient deliberately extend into the concave shoulders.
+- Resize changes the panel dimensions and rebuilds the outer mask. The native frame change is deferred to the next main-queue turn, so GPUI receives the new viewport. `--show --steps frame,mirror,resize,pulse,remove,quit` runs those actions on a timer (`--step-ms N` sets the interval), for checks that must not send input events. The green strip and gradient deliberately extend into the concave shoulders.
 - Remove display probe closes that window. Quit exits the process. Display enumeration happens at launch; hotplug reconciliation is not implemented.
 - The camera fixture intentionally has square corners. An outer notch mask does not solve the independent camera crop.
 
 No user preferences, persistence migration, private SkyLight API, system helper, permission request, status item, login item, or installed-app integration is included.
+
+## Live checks
+
+`live-checks/` holds the scripts behind the gate record. None of them runs from `verify.sh`.
+
+- `capture-steps.sh <step-ms> <steps>` runs timed steps, captures the probe by window id and compares the video pixels with the expected frame, crop and mirror. No input events.
+- `idle-phases.sh <steps> <step-ms> <label:start:length> ...` reports context switches and CPU time in fixed windows of a run. No input events.
+- `input-session.sh <op> ...` **takes over the pointer and keyboard.** It opens a scratch text field and drives the probe with real clicks and keys to check focus. Run it only when the machine is otherwise unused.
+
+They need Screen Recording access for the terminal, and `input-session.sh` also needs Accessibility. Set `PROFILE=release` to test a release build. Output goes to `/tmp/anotchup-live-checks`.
 
 ## Files and boundaries
 

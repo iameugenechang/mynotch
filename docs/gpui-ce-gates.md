@@ -11,7 +11,7 @@ Completed without opening windows:
 - The real Objective-C bridge compiles and its headless contracts pass: CoreVideo format/plane layout and copying, invalid dimensions, CF release, native path conversion and inside/outside samples of the Rust notch silhouette.
 - Rust formatting, Clippy, build and headless checks pass without warnings. A [local block 0.1.6 patch](../rust/vendor/block/PATCH.md) fixes the invalid extern-static type and implicit C ABI declarations. Verification compiles that source with warnings denied and exercises actual native block copy/release and captured-resource lifetime.
 
-These are build and contract results, not native window, Metal rendering, or performance acceptance. The owner's first graphical launch failed during CE popup creation. A later run opened below the menu bar, failing the placement gate. The first placement repair then caused an AppKit exception, leaving an idle process with no visible panel. These failures are recorded below. After the borderless-at-creation repair, the owner confirmed that the panel reaches the notch area. Initial placement passes on the tested setup. A later authorized native UI check passed hover focus, editor entry/exit, resize anchoring and stacking in a temporary full-screen Space, but failed passive-click focus and resized rendering. The resize defect was fixed on 2026-11-12; passive-click focus did not reproduce that day and is unresolved. Other displays and ordinary desktop-to-desktop switching remain unverified. Release/Intel builds and minimum OS support have not been tested.
+These are build and contract results, not native window, Metal rendering, or performance acceptance. The owner's first graphical launch failed during CE popup creation. A later run opened below the menu bar, failing the placement gate. The first placement repair then caused an AppKit exception, leaving an idle process with no visible panel. These failures are recorded below. After the borderless-at-creation repair, the owner confirmed that the panel reaches the notch area. Initial placement passes on the tested setup. A later authorized native UI check passed hover focus, editor entry/exit, resize anchoring and stacking in a temporary full-screen Space, but failed passive-click focus and resized rendering. The resize defect was fixed on 2026-11-12. Passive-click focus passed on that day's code in both an ordinary desktop and a full-screen Space; the earlier failure is unexplained. Other displays remain unverified. A release build passes; Intel builds and minimum OS support have not been tested.
 
 ### First launch: popup initializer panic
 
@@ -95,11 +95,30 @@ Evidence, same display and debug build, no input events:
 - Six teardown runs, with the link both stopped and running, exited with status 0 and no panic, crash report or logged exception.
 - 600 replacements at 50 ms intervals completed, then the process returned to no measurable CPU. The leak count was unchanged at 415.
 
-Not covered: a real click or hover arriving while the link is stopped. It takes the same wake path as the timer steps, but it has not been observed. Occlusion and display changes while stopped, a release build and animations were not tested.
+A real click and hover while the link is stopped, a release build and an animation were checked later the same day; see the sections below. Occlusion and display changes while stopped were not tested.
 
-### Passive-click focus: not reproduced on 2026-11-12
+### Owner-authorized input session on 2026-11-12
 
-Before the resize fix, a rebuilt harness clicked Next frame, Mirror and Resize with real CGEvents in two runs. Each time the scratch field stayed key, no resign notification fired and a typed character arrived. This contradicts the 2026-11-06 failure and the difference is unexplained, so the blocker stays open rather than passing. The earlier harness ran the scratch window in a full-screen Space; these runs used an ordinary desktop window. In one further run, after clicking Begin typing probe, the scratch window did not regain key status on a real click for the rest of the run. That may be the harness or a defect in ending editing. Testing stopped at the owner's request because it took over the pointer and keyboard.
+The owner handed over the pointer and keyboard for about 20 minutes. A scratch window with a text field observed its own key status while real CGEvents clicked the probe. Keys were sent only when the scratch field or the probe's editor was known to hold focus. Built-in display, macOS 27.0.1. The scripts are in `rust/live-checks/`.
+
+- **Pass: passive clicks, ordinary desktop and full-screen Space.** Next frame, Mirror and Resize (both directions) each left the scratch field key, with no resign notification, and the next typed character arrived in the field. The probe log confirmed each action ran. The 2026-11-06 failure did not reproduce in either setting across four runs that day. Its cause is unknown, so this is a pass on the current code, not an explanation.
+- **Pass: editing entry and exit.** Begin typing took key status and the typed characters reached the probe. Escape, Enter, the End button and a click on the scratch field each ended editing, returned key status to the scratch window and delivered the next character there. The same held in the full-screen Space for Escape and an outside click. An earlier run that day, where focus did not return, used a harness that reset focus programmatically; it did not recur.
+- **Pass: teardown while editing.** Quit and Remove display probe, each clicked while the probe was key, exited with no crash report, and typing returned to the scratch field.
+- **Pass: input while the display link is stopped.** After 2.5 idle seconds, hovering Next frame rendered its hover colour and a click rendered the new frame, in debug and release builds.
+- **Pass: Spaces and stacking.** A screen-region capture matched the probe's own window capture on 100% of its opaque pixels on the desktop, in the scratch window's full-screen Space, with the auto-hidden menu bar revealed, after switching to the adjacent Space and back, during Mission Control and afterwards. The probe draws over the revealed menu bar and is not pushed down.
+
+Harness defect, now guarded: the synthetic Control+arrow events used to switch Spaces left Control latched in the session, so later clicks became context-menu clicks and two later runs hung. No such click reached the probe or another application. The harness now releases modifiers after those events, refuses to start with one held and stops if one latches.
+
+Not covered: another application's full-screen window, a second display, moving editing between displays, and the physical cutout.
+
+### Further input-free checks on 2026-11-12
+
+- **Pass: release build.** Builds in about 32 seconds to a 19.6 MB executable. Headless contracts, the eight-capture colour, crop and mirror comparison, and four teardown runs pass.
+- **Pass: animation with the idle fix.** A scripted 600 ms repeating opacity pulse kept the display link running, at about 700 context switches per second and 0.7% of one core in release (1.7% in debug). After the pulse was removed the process returned to under 2 context switches per second and no measurable CPU.
+- **Pass: resize under load.** 120 steps at 60 ms intervals mixing frame, mirror and resize delivered all 60 viewport changes, and the final capture matched the expected frame.
+- **Memory footprint.** The roughly 220 MB figure is not caused by frame replacement. It is already present 0.6 seconds after launch, before any step, and stays while frames are being presented at any rate. About 144 MB of it is listed as reclaimable graphics memory. Once the window is idle the footprint is 39 to 46 MB. Which allocation owns it has not been traced.
+
+Not done: the deferred branch of the frame waker, taken when the window state is locked during a wake, was not deliberately exercised. Blur has not been compared with the Swift app side by side.
 
 ## First owner check: can it sit around the physical notch?
 
