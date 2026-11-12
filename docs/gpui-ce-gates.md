@@ -78,9 +78,24 @@ Run on the built-in display, macOS 27.0.1, debug build, with no pointer, key or 
 - **Pass: frame replacement.** 600 replacements at 50 ms intervals. Footprint stayed flat at 224 MB during the run and returned to 46 MB afterwards, against 33 MB for a fresh idle probe. `leaks` reported 410 leaks with no steps and 416 after both 100 and 600 steps, so nothing grows with frame count. The fixed set is rooted in an AppKit app-intents XPC connection, not in the bridge.
 - **Pass: teardown.** Five scripted runs ending in Remove display probe or Quit, some after resizing, exited with status 0, no panic, no new crash report and no exception in the unified log. Editing-state teardown was not run, since it needs keyboard focus.
 - **Pass: mask and transparency.** The shoulders, side gutters and lower corners have alpha 0 at both sizes, with the opaque edge starting at the same offsets after resizing. The green strip and gradient are clipped by the mask.
-- **Idle redraw.** The backend's display link keeps calling its frame callback while nothing changes. Cost was about 1.3% of one core over 20 seconds. This is measured, not accepted: the finished app should not need a running display link when idle.
+- **Idle redraw: found, then fixed below.** The backend's display link kept calling its frame callback while nothing changed.
 
 Limits: one display at one scale. Captures show what the window server composited, not the panel against the hardware cutout. Blur was only checked by eye in the captures. The 224 MB figure under rapid replacement is unexplained. The startup log errors about app intents and a missing bundle identifier come from running an unbundled executable.
+
+### Idle redraw repair
+
+The pinned backend subscribes every visible window to its display's `CVDisplayLink` and never unsubscribes while the window is visible. Each vsync tick woke the main thread and ran GPUI's frame callback, which found nothing dirty and drew nothing. An idle probe measured about 247 context switches per second and 0.8% of one core. GPUI already has a wake hook for platforms that stop requesting frames, but this backend did not implement it.
+
+Fix, in the vendored backend: `MacWindow::frame_waker` records demand and restarts a stopped link. After each tick, a window with no demand for 1.5 seconds stops its link. Demand is the window becoming dirty, a next-frame callback, or a pending forced render. The grace period covers GPUI's one second of sustained presentation after high-rate input. Occlusion, screen and key-status changes still restart the link as before. The policy lives in `frame_idle.rs` and is exercised by `--check-native`.
+
+Evidence, same display and debug build, no input events:
+
+- Idle for 10 seconds: 1.7 context switches per second and no measurable CPU time, against 247 and 9 centiseconds before.
+- With 2.5 second steps, so the link was stopped before each one, all eight captures still matched the expected frame, crop and mirror, and the resize produced the new viewport. Timer-driven changes do restart the link.
+- Six teardown runs, with the link both stopped and running, exited with status 0 and no panic, crash report or logged exception.
+- 600 replacements at 50 ms intervals completed, then the process returned to no measurable CPU. The leak count was unchanged at 415.
+
+Not covered: a real click or hover arriving while the link is stopped. It takes the same wake path as the timer steps, but it has not been observed. Occlusion and display changes while stopped, a release build and animations were not tested.
 
 ### Passive-click focus: not reproduced on 2026-11-12
 
@@ -135,7 +150,7 @@ Manual acceptance checklist; resized rendering was repaired on 2026-11-12, the r
 - The gradient, green strip, text and rendered surfaces are clipped together, with genuinely transparent corners, not black rectangles.
 - Resize and display scale changes keep the mask aligned without inversion, seams, stale bounds or clipping regressions.
 - Content blur and backdrop blur display correctly under the native mask. A blur API compiling is not visual equivalence with SwiftUI.
-- Rendering idle content does not keep redrawing unexpectedly. Measure later; no CPU, memory or battery improvement is claimed.
+- Rendering idle content does not keep redrawing unexpectedly. The idle display link was stopped on 2026-11-12; see the repair record. No battery or comparative claim against the Swift app is made.
 
 ## Gate 3: camera rendering route
 

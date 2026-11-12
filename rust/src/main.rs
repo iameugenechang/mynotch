@@ -210,7 +210,7 @@ fn main() {
             "native CoreVideo/CoreGraphics contracts failed"
         );
         println!(
-            "Native popup style, placement arithmetic, frame constraint, block lifetime, popup initializer, buffer format, plane copy, invalid format and path contracts passed (no windows or camera)."
+            "Native frame idle policy, popup style, placement arithmetic, frame constraint, block lifetime, popup initializer, buffer format, plane copy, invalid format and path contracts passed (no windows or camera)."
         );
         return;
     }

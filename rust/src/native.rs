@@ -6,6 +6,8 @@ use gpui::Window;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::c_void;
 // Compile the exact production initializer, not a test copy of the message send.
+#[path = "../vendor/gpui_ce_macos/src/frame_idle.rs"]
+mod frame_idle;
 #[path = "../vendor/gpui_ce_macos/src/popup_style.rs"]
 mod popup_style;
 #[path = "../vendor/gpui_ce_macos/src/popup_tracking.rs"]
@@ -145,7 +147,27 @@ fn popup_style_contract() {
         titled | Style::NonactivatingPanel,
     );
 }
+fn frame_idle_contract() {
+    use frame_idle::{FrameIdle, GRACE};
+    use std::time::{Duration, Instant};
+    let start = Instant::now();
+    let short = GRACE - Duration::from_millis(1);
+    let mut idle = FrameIdle::new(start);
+    // A fresh window keeps ticking through the grace period, then parks.
+    assert!(!idle.tick(false, start + short));
+    assert!(idle.tick(false, start + GRACE));
+    // Demand keeps the link alive and restarts the grace period.
+    assert!(!idle.tick(true, start + GRACE * 3));
+    assert!(!idle.tick(false, start + GRACE * 3 + short));
+    assert!(idle.tick(false, start + GRACE * 4));
+    // A restarted link gets a full grace period, and a clock that appears to
+    // run backwards never parks early.
+    idle.note_demand(start + GRACE * 10);
+    assert!(!idle.tick(false, start + GRACE * 10 + short));
+    assert!(!idle.tick(false, start));
+}
 pub fn contracts() -> bool {
+    frame_idle_contract();
     popup_style_contract();
     blocks_contract();
     tracking_area_contract();

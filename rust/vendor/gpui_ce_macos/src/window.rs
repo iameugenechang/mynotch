@@ -61,13 +61,15 @@ use std::{
         Arc, Weak,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[path = "popup_tracking.rs"]
 mod popup_tracking;
 #[path = "popup_style.rs"]
 mod popup_style;
+#[path = "frame_idle.rs"]
+mod frame_idle;
 
 const WINDOW_STATE_IVAR: &str = "windowState";
 
@@ -817,6 +819,11 @@ struct MacWindowState {
     cursor_style: CursorStyle,
     cursor_visible: Arc<AtomicBool>,
     frame_source: Option<WindowFrameSource>,
+    /// Set by GPUI's frame waker; consumed once per display-link tick.
+    frame_demand: Arc<AtomicBool>,
+    /// True while the display link is stopped and a wake must restart it.
+    frame_parked: Arc<AtomicBool>,
+    frame_idle: frame_idle::FrameIdle,
     renderer: renderer::Renderer,
     /// Forces an uncached scene after GPU recovery or a transient presentation failure.
     force_render_pending: bool,
@@ -988,6 +995,8 @@ impl MacWindowState {
 
     fn start_display_link(&mut self) {
         self.stop_display_link();
+        // Until a link is running, a frame wake must retry this.
+        self.frame_parked.store(true, Ordering::Relaxed);
         unsafe {
             if !self
                 .native_window
@@ -1006,6 +1015,14 @@ impl MacWindowState {
             .get_or_insert_with(|| WindowFrameSource::new(data, step))
             .start(display_id)
             .log_err();
+        self.frame_idle.note_demand(Instant::now());
+        self.frame_parked.store(false, Ordering::Relaxed);
+    }
+
+    /// Stop ticking an idle window. GPUI's frame waker restarts the link.
+    fn park_display_link(&mut self) {
+        self.stop_display_link();
+        self.frame_parked.store(true, Ordering::Relaxed);
     }
 
     fn stop_display_link(&mut self) {
@@ -1258,6 +1275,9 @@ impl MacWindow {
                 cursor_style: CursorStyle::Arrow,
                 cursor_visible,
                 frame_source: None,
+                frame_demand: Arc::new(AtomicBool::new(false)),
+                frame_parked: Arc::new(AtomicBool::new(false)),
+                frame_idle: frame_idle::FrameIdle::new(Instant::now()),
                 renderer,
                 force_render_pending: false,
                 request_frame_callback: None,
@@ -2041,6 +2061,42 @@ impl PlatformWindow for MacWindow {
         let window = this.native_window;
 
         unsafe { window.styleMask().contains(NSWindowStyleMask::FullScreen) }
+    }
+
+    fn frame_waker(&self) -> Option<Rc<dyn Fn()>> {
+        // Weak: GPUI stores this waker in an invalidator that the frame
+        // callback, owned by this state, also holds.
+        let state = Arc::downgrade(&self.0);
+        let (demand, parked, executor) = {
+            let this = self.0.lock();
+            (
+                this.frame_demand.clone(),
+                this.frame_parked.clone(),
+                this.foreground_executor.clone(),
+            )
+        };
+        Some(Rc::new(move || {
+            demand.store(true, Ordering::Relaxed);
+            if !parked.load(Ordering::Relaxed) {
+                return;
+            }
+            let Some(state) = state.upgrade() else {
+                return;
+            };
+            // GPUI may wake while a backend call still holds the state lock.
+            if let Some(mut lock) = state.try_lock() {
+                lock.start_display_link();
+                return;
+            }
+            executor
+                .spawn(async move {
+                    let mut lock = state.lock();
+                    if lock.frame_parked.load(Ordering::Relaxed) {
+                        lock.start_display_link();
+                    }
+                })
+                .detach();
+        }))
     }
 
     fn on_request_frame(&self, callback: Box<dyn FnMut(RequestFrameOptions)>) {
@@ -3389,7 +3445,15 @@ extern "C" fn step(view: *mut c_void) {
             let request = lock.next_frame_request();
             drop(lock);
             callback(request);
-            window_state.lock().request_frame_callback = Some(callback);
+            let mut lock = window_state.lock();
+            lock.request_frame_callback = Some(callback);
+            // Demand raised before or during the callback keeps the link alive.
+            // A pending forced render must also be served by a later tick.
+            let demand =
+                lock.frame_demand.swap(false, Ordering::Relaxed) || lock.force_render_pending;
+            if lock.frame_idle.tick(demand, Instant::now()) {
+                lock.park_display_link();
+            }
         }
     }
 }

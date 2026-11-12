@@ -24,6 +24,12 @@ The initializer change is independent of anotchup's per-instance key-policy subc
 
 The original titled probe appeared below the menu bar. Changing its style to borderless after anotchup's per-instance class replacement caused an AppKit `NSRangeException` during title-bar KVO observer removal. The running process's unified log confirmed the exception stack; the terminal showed no error. Creating the panel borderless avoids that teardown path. The bridge now validates the style instead of mutating it. No method swizzle or new application delegate is introduced.
 
+### Idle display link
+
+Upstream keeps a visible window subscribed to its display link indefinitely, so an unchanged window wakes the main thread on every vsync tick. `src/window.rs` now implements `PlatformWindow::frame_waker`, which GPUI calls when a window becomes dirty or gains next-frame callbacks. `step` stops the link once `src/frame_idle.rs` reports 1.5 seconds without demand, and the waker restarts it. Existing restarts on occlusion, screen and key-status changes are unchanged, and they also re-arm the idle timer.
+
+The waker holds the window state weakly. It restarts the link directly when it can take the state lock, and otherwise defers to the foreground executor, because GPUI may wake during a backend call that already holds that lock. This applies to every window kind, not only popups.
+
 ## Regression evidence
 
 `rust/src/native.rs` compiles the exact `popup_tracking.rs` used by this backend and calls it on the main thread with a live NSObject owner. It checks the resulting owner, options and rectangle and releases the objects. No NSApplication or window is created.
@@ -31,5 +37,7 @@ The original titled probe appeared below the menu bar. Changing its style to bor
 With the original void-return declaration, `--check-native` reproduced the exact panic and exited 101. With the object-return fix, the same check passes. The full `rust/verify.sh` also passes and asserts that Cargo resolves exactly one macOS backend at this local path. This does not establish that the rest of window creation or live rendering works.
 
 `rust/src/native.rs` also compiles the exact production `popup_style.rs`. Its headless contracts require untitled popups to start borderless and explicitly titled popups to preserve controls and resize policy. The passing style test does not create a window or reproduce the KVO exception. The updated build and headless checks pass without warnings; live placement and teardown still require acceptance.
+
+`rust/src/native.rs` compiles the exact `frame_idle.rs` and checks the grace period, demand resetting it, a restarted link and a backwards clock. Stopping and restarting a live link is covered only by the live runs in the gate record.
 
 Remove each patch when adopting an upstream revision with the corresponding fix, retaining the regression tests against that revision's production code. Do not replace this with Release mode or a disabled message-signature check.

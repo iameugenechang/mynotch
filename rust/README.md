@@ -4,7 +4,7 @@ A separate Rust executable for the `rewrite/gpui-ce` branch, based on `193ead6`.
 
 ## Build and verify
 
-Requires the Rust 1.99.1 toolchain, Python 3, and Xcode's macOS SDK/Metal tools for the graphical build. GPUI-CE is pinned to `81742184cb1df090709257a5e4061eba44fa8e8a` in `Cargo.toml` and `Cargo.lock`, with a [local macOS backend patch](vendor/gpui_ce_macos/PATCH.md) for a popup initializer return-type bug. Run commands from this directory so a rustup installation sees `rust-toolchain.toml`.
+Requires the Rust 1.99.1 toolchain, Python 3, and Xcode's macOS SDK/Metal tools for the graphical build. GPUI-CE is pinned to `81742184cb1df090709257a5e4061eba44fa8e8a` in `Cargo.toml` and `Cargo.lock`, with a [local macOS backend patch](vendor/gpui_ce_macos/PATCH.md) for a popup initializer return-type bug, borderless popup creation and stopping the display link while a window is idle. Run commands from this directory so a rustup installation sees `rust-toolchain.toml`.
 
 ```bash
 ./verify.sh
