@@ -1,7 +1,10 @@
 # Shared by the live checks. Source it; do not run it.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROFILE="${PROFILE:-debug}"
-BIN="$HERE/../target/$PROFILE/anotchup-gates"
+# APP=twin selects the SwiftUI twin (build it with swiftui-twin/build.sh <profile>).
+APP="${APP:-gpui}"
+if [ "$APP" = twin ]; then BIN="$HERE/../target/twin-$PROFILE/anotchup-twin"; else BIN="$HERE/../target/$PROFILE/anotchup-gates"; fi
+PROC="$(basename "$BIN")"
 export OUT="${OUT:-/tmp/anotchup-live-checks}"
 export PROBE_LOG="$OUT/probe.log"
 mkdir -p "$OUT"

@@ -42,9 +42,15 @@ No user preferences, persistence migration, private SkyLight API, system helper,
 - `idle-phases.sh <steps> <step-ms> <label:start:length> ...` reports context switches and CPU time in fixed windows of a run. No input events.
 - `input-session.sh <op> ...` **takes over the pointer and keyboard.** It opens a scratch text field and drives the probe with real clicks and keys to check focus. Run it only when the machine is otherwise unused.
 
+- `compare.sh` measures launch, idle, a pulse and frame replacement for one app. `APP=twin` selects the SwiftUI twin, on any of these scripts. No input events.
+- `windowserver.sh` reports WindowServer CPU while each variant runs a pulse. No input events.
 - `ax-dump.m` prints the probe's accessibility tree, or presses an element by title. No pointer or key events.
 
 They need Screen Recording access for the terminal. `input-session.sh` and `ax-dump.m` also need Accessibility. Set `PROFILE=release` to test a release build. Output goes to `/tmp/anotchup-live-checks`.
+
+## SwiftUI twin
+
+`swiftui-twin/Twin.swift` is a SwiftUI copy of the probe for like-for-like measurement, with the same panel, content, `--steps` flag and log lines. Build it with `swiftui-twin/build.sh release`; output goes to `target/twin-release/`. It is not part of `verify.sh`. Results are in the [gate record](../docs/gpui-ce-gates.md).
 
 ## Files and boundaries
 

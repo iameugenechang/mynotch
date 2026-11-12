@@ -14,4 +14,5 @@ while [ $n -lt $total ] && kill -0 $pid 2>/dev/null; do
     sleep 0.05
 done
 if kill -0 $pid 2>/dev/null; then kill $pid; wait $pid 2>/dev/null; else wait $pid; echo "probe exit=$?"; fi
-python3 "$HERE/camcheck.py" "$2"
+# The twin logs where its video box landed; the GPUI probe uses the default.
+BOX=$(sed -n 's/^\[video\] box=//p' "$PROBE_LOG" | head -1) python3 "$HERE/camcheck.py" "$2"

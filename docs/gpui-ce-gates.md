@@ -142,6 +142,29 @@ The raw-key probe was replaced with GPUI-CE's own single-line `text_input` from 
 
 Limits: elements get no accessibility role or label by default. A plain `div` with a click handler is invisible to assistive technology until the author adds both, so every control in the app would need them. The tree is built lazily and the first query after launch is incomplete. VoiceOver itself was not run. Selection by dragging, the candidate window of a real input method, and right-to-left text were not tested. The field has no "done editing" event; commit is the panel's own Enter handler.
 
+### SwiftUI twin comparison on 2026-11-12
+
+`rust/swiftui-twin/Twin.swift` is a SwiftUI copy of the probe: the same borderless nonactivating panel, level, size, placement, notch clip, content, timed steps and log lines, hosted in an `NSHostingView`. Both were release builds on the built-in display, measured with no input events by `live-checks/compare.sh` (two rounds, near-identical) and `live-checks/windowserver.sh` (ten rounds).
+
+| Measure | GPUI-CE probe | SwiftUI twin |
+|---|---|---|
+| Executable size | 20.5 MB | 0.3 MB |
+| Launch to panel ready, median of 5 | 132 ms | 105 ms |
+| Idle CPU | none measurable | none measurable |
+| Idle footprint | 33 MB | 16 MB |
+| Footprint during a pulse or frame replacement | 221 to 224 MB | 17 MB |
+| Pulse animation, app CPU | about 6.5% | about 5% |
+| Pulse animation, context switches per second | about 670 | about 260 |
+| Pulse animation, WindowServer CPU | 27 to 31% | 42 to 43% |
+| Frames at 20 per second, app CPU | about 7% | about 6% |
+| Frames at 20 per second, context switches per second | about 675 | about 50 |
+
+WindowServer CPU with neither app running was 18 to 28% in the same rounds, from the rest of the desktop. So during the pulse the GPUI probe added roughly 8 points and the twin roughly 20. Dropping the twin's notch clip or its system material did not reduce that. Adding app and WindowServer cost together, the pulse is cheaper overall in GPUI and the twin is cheaper inside its own process.
+
+Reading: idle cost is equal, which is the state a notch app is in almost all the time, and it needed the display-link patch to get there. SwiftUI uses far less memory and wakes the process far less while something is moving. GPUI's own process costs slightly more, but it hands the compositor one finished layer, which is cheaper for the system during animation.
+
+Limits. This is a small fixture, not the app: the Swift app's real cost is mostly media, calendar and HUD work that neither twin includes. WindowServer figures are shared with the whole desktop and noisy; only the consistent gap across rounds is meaningful. The twin shows frames as layer contents and builds each frame in Swift on the main thread, which is part of its app CPU in the frame test; its video colours differ from the expected values by up to 33 of 255, where the GPUI probe is within 1. Text editing cost, energy on battery and the lock screen were not compared. The executable size gap is mostly SwiftUI being a system framework.
+
 ## First owner check: can it sit around the physical notch?
 
 This is the first live gate, before inspecting video or blur. No software can draw on the physical camera cutout. The goal is a window that reaches the screen's top edge and surrounds or extends below that cutout, rather than being pushed underneath the menu-bar safe area.

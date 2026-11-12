@@ -7,6 +7,7 @@ M = [[0.8225, 0.1774, 0.0], [0.0332, 0.9669, 0.0], [0.0171, 0.0724, 0.9108]]
 def p3(rgb): l = [lin(c) for c in rgb]; return tuple(enc(sum(M[i][j]*l[j] for j in range(3))) for i in range(3))
 def rgb(y, u, v): return tuple(min(255, max(0, round(c))) for c in (y+1.402*(v-128), y-0.344136*(u-128)-0.714136*(v-128), y+1.772*(u-128)))
 W, H, BW, BH, X0, Y0 = 320, 240, 210.0, 130.0, 16.0, 118.0   # source px; element box in points
+if os.environ.get('BOX'): X0, Y0, BW, BH = map(float, os.environ['BOX'].split(','))   # x,y,w,h from the top-left
 scale = max(BW/W, BH/H); ox = (W*scale-BW)/2; oy = (H*scale-BH)/2
 def expect(px_, py_, phase, mirrored):
     sx = int((px_/2 - X0 + ox)/scale); sy = int((py_/2 - Y0 + oy)/scale)   # displayed column/row in the buffer
@@ -24,8 +25,8 @@ for n in range(len(files)):
         if steps[n-1] == 'frame': phase = (phase+24) % 320
         if steps[n-1] == 'mirror': mirrored = not mirrored
     w, h, get = load(files[n]); worst = 0; count = 0
-    for py_ in range(240, 494, 6):
-        for px_ in range(36, 450, 3):
+    for py_ in range(int(2*Y0)+4, int(2*(Y0+BH))-2, 6):
+        for px_ in range(int(2*X0)+4, int(2*(X0+BW))-2, 3):
             sxf = (px_/2 - X0 + ox)/scale; syf = (py_/2 - Y0 + oy)/scale
             x = W-1-sxf if mirrored else sxf
             # skip samples within 3 source px of a colour boundary (bilinear filtering)
@@ -33,8 +34,9 @@ for n in range(len(files)):
             e = p3(expect(px_, py_, phase, mirrored)); c = get(px_, py_)[:3]
             d = max(abs(a-b) for a, b in zip(e, c)); worst = max(worst, d); count += 1
     # just outside the box must be background, not video
-    outside = [get(28, 366)[:3], get(456, 366)[:3], get(240, 232)[:3], get(240, 500)[:3]]
+    mx, my = int(2*X0+BW), int(2*Y0+BH)   # box centre in pixels
+    outside = [get(int(2*X0)-4, my)[:3], get(int(2*(X0+BW))+4, my)[:3], get(mx, int(2*Y0)-4)[:3], get(mx, int(2*(Y0+BH))+4)[:3]]
     leak = any(abs(c[1]-0x35) > 16 or c[0] > 0x80 for c in outside)
-    ok = worst <= 6 and not leak; bad += not ok
+    ok = worst <= int(os.environ.get('TOL', '6')) and not leak; bad += not ok
     print(f'{files[n]} {w}x{h} phase={phase} mirrored={int(mirrored)} samples={count} worst_channel_error={worst} outside_is_background={int(not leak)} {"PASS" if ok else "FAIL"}')
 sys.exit(1 if bad else 0)
