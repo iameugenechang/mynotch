@@ -1,0 +1,143 @@
+# GPUI-CE rewrite gates
+
+Baseline: `193ead6`, branch `rewrite/gpui-ce`. The branch name is separate from `feat/rearch`; its ancestry deliberately retains the verified Swift implementation. The installed app is untouched. Shelf and Lottie are out of scope for the Rust replacement.
+
+## Evidence so far
+
+Completed without opening windows:
+
+- Rust 1.99.1 builds GPUI-CE at `81742184cb1df090709257a5e4061eba44fa8e8a`, with one local macOS backend patch described below. `Cargo.lock` fixes transitive revisions too.
+- Eight pure tests cover editor-only eligibility, both focus-transfer callback orders, independent displays, stale lifetime rejection, geometry, aspect-fill arithmetic and mirrored NV12 planes.
+- The real Objective-C bridge compiles and its headless contracts pass: CoreVideo format/plane layout and copying, invalid dimensions, CF release, native path conversion and inside/outside samples of the Rust notch silhouette.
+- Rust formatting, Clippy, build and headless checks pass without warnings. A [local block 0.1.6 patch](../rust/vendor/block/PATCH.md) fixes the invalid extern-static type and implicit C ABI declarations. Verification compiles that source with warnings denied and exercises actual native block copy/release and captured-resource lifetime.
+
+These are build and contract results, not native window, Metal rendering, or performance acceptance. The owner's first graphical launch failed during CE popup creation. A later run opened below the menu bar, failing the placement gate. The first placement repair then caused an AppKit exception, leaving an idle process with no visible panel. These failures are recorded below. After the borderless-at-creation repair, the owner confirmed that the panel reaches the notch area. Initial placement passes on the tested setup. A later authorized native UI check passed hover focus, editor entry/exit, resize anchoring and stacking in a temporary full-screen Space, but failed passive-click focus and resized rendering. The resize defect was fixed on 2026-11-12; passive-click focus did not reproduce that day and is unresolved. Other displays and ordinary desktop-to-desktop switching remain unverified. Release/Intel builds and minimum OS support have not been tested.
+
+### First launch: popup initializer panic
+
+The owner's `--show` run hit an Objective-C signature check before the anotchup adapter ran: CE declared `NSTrackingArea.initWithRect:options:owner:userInfo:` as returning void rather than an object. The exact panic was reproduced headlessly with the extracted production initializer. Correcting its return type and retaining the returned object makes that regression pass.
+
+Only the macOS crate from the CE workspace is copied under `rust/vendor`, with its license, normalized manifest and [patch record](../rust/vendor/gpui_ce_macos/PATCH.md). Cargo verifies one patched backend and one pinned CE family. Runtime checks remain enabled, and the Cargo cache is untouched. The eight pure tests, Clippy, build and expanded headless checks pass. Another live run is still needed; this fix does not prove later startup or rendering stages.
+
+### Placement failure: below the menu bar
+
+The owner reported that the panel appeared below the menu bar. The pinned CE backend creates `Titled | FullSizeContentView` windows even with `titlebar: None`; hiding the title bar is not equivalent to the Swift reference's borderless panel. The initial bridge left that style and AppKit's frame constraint unchanged.
+
+The current backend creates untitled popups as borderless, nonactivating panels from the start; the bridge rejects an unexpected style rather than changing it. Its per-instance subclass returns the requested rectangle from `constrainFrameRect:toScreen:` so AppKit does not push this overlay into the visible work area. Installation, showing and resizing anchor against the full screen frame. Ordinary windows and explicitly titled popups retain their previous style policy. GPUI's shared runtime classes are not swizzled.
+
+Headless checks cover top-center coordinates on primary, negative-origin and vertically stacked screens at both probe sizes, plus the constraint function preserving the requested rectangle. The build and verification pass without warnings. These checks do not create a window or prove AppKit/compositor placement. The owner subsequently confirmed initial live placement after the repair described below; the remaining live checks are still open.
+
+The probe prints `[placement]` on showing and resizing, with `target_top`, `window_top`, `content_top` and `gap`. In a passing top-edge placement, the three top coordinates should agree and `gap` should be zero. If it still appears displaced, include that line in the report. Correct window coordinates alone do not prove correct pixels or focus.
+
+### Placement repair regression: running with no panel
+
+The first repair changed `styleMask` after `object_setClass`. The owner then reported a running process with no visible panel and no terminal error. Sampling that process showed an idle AppKit event loop, not a deadlock. Its macOS unified log recorded `NSRangeException` with a stack through `NSWindow removeObserver:forKeyPath:context:`, `NSTitlebarView viewWillMoveToWindow:` and `NSWindow setStyleMask:`. The exception reason was redacted. AppKit caught the exception during launch and kept the event loop alive without completing our window setup.
+
+The repair removes that runtime style mutation. The local CE backend now selects borderless/nonactivating style before the window initializer, so there is no title bar to tear down after the instance-class change. The shared production helper `popup_style.rs` is exercised by headless contracts: an untitled popup drops the old titled/full-size flags, while an explicitly titled popup preserves its requested controls. This is a style-policy regression test, not a reproduction of the full AppKit exception. Native window teardown and visual acceptance remain open.
+
+Startup now prints `[startup]` stages before opening windows, configuring panels and completing each display probe. No `[placement]` or `probe ready` line means setup did not finish. The updated warning-free build and headless checks pass; verification does not modify or restart running probes.
+
+On 2026-11-06, the owner restarted the updated probe and confirmed that it now reaches the notch area. This closes the reported startup regression and accepts initial placement on that setup. No coordinates, display inventory, focus, Spaces, resizing or teardown results were supplied.
+
+### Authorized native UI check: focus and resizing failures
+
+On 2026-11-06, the owner asked the assistant to perform the live checks. Existing Accessibility, event-posting and screen-capture access were available; no permission prompts were requested. A temporary Objective-C scratch application provided an editable field. Real CGEvents clicked the running probe and typed into the scratch field or the probe's explicit editor. Screenshots were restricted to the probe. No existing documents were edited. The scratch window and its temporary full-screen Space were closed, the probe's original size was restored, and the harness requested restoration of the prior application and pointer position.
+
+Results on the current single-display setup:
+
+- **Pass: hover.** The scratch field remained key and received the next character.
+- **Fail: passive clicks.** Next frame, Mirror and Resize independently caused the scratch window to lose key status. The following character did not reach its field. The scratch application still remained the frontmost process, so checking only application activation would have missed this failure. Each case started with a freshly focused scratch field.
+- **Pass: explicit editor.** Begin typing probe routed physical-key events to the probe, with the typed suffix visible in its screenshot and the scratch text unchanged. Escape, End and clicking the scratch field each restored typing to the scratch field; the probe returned to non-key mode.
+- **Pass: frame anchoring only.** Window-server bounds changed from `(584, 0, 560, 320)` to `(524, 0, 680, 390)` and back. The top and horizontal center stayed fixed.
+- **Fail: resized rendering.** After expansion, content shifted/clipped at the top and left unused space below. The defect remained after a two-second settling interval. Correct native frame bounds did not mean the GPUI view, drawable and mask resized together. The cause has not yet been isolated.
+- **Pass: tested full-screen stacking.** In the scratch application's temporary full-screen Space, the probe remained on screen at its original coordinates and ahead of the scratch window in the WindowServer ordering. Returning to the original desktop preserved its frame and visibility. This does not cover arbitrary desktop-to-desktop switching, Mission Control, other apps' full-screen behavior or auto-hidden menu-bar interaction.
+
+Two completed runs confirmed the focus failures and resized-content defect. The initial attempt was discarded after unexpected scratch-field input. A later harness attempt stopped because programmatic refocusing alone did not recover the field; completed runs used a real click to reset focus between cases. The initial Unicode-only event generator produced literal `a` characters in the GPUI raw-key probe; confirmation used matching physical key codes and verified the expected typed suffix. That first generator limitation is not evidence of an application typing bug.
+
+Local diagnostic files: `/tmp/anotchup-ui-check/live.m`, `/tmp/anotchup-ui-check/results-confirmed.txt`, `/tmp/anotchup-ui-check/results-settled.txt` and probe-only PNGs in the same directory. These are temporary, coordinate-based test artifacts, not a portable contract suite. No production behavior was changed during this test request. Passive-click focus and resize rendering remain blockers.
+
+### Resize rendering repair
+
+On 2026-11-12 the resized-content defect was reproduced and fixed without sending any input events. `--show --resize-cycle` makes the probe toggle its own size three times on a timer, through the same code path as the Resize button. Captures were taken by window id.
+
+Cause: the bridge called `setFrame:` from inside a GPUI update. AppKit resizes the view synchronously, so the backend's resize callback ran while the app was already borrowed. GPUI's handler uses a fallible borrow and drops the update, so the Metal drawable grew while GPUI kept laying out at the old viewport. The old frame was then stretched over the new drawable. Before the fix, no `[resize]` line was printed after a resize; the bounds observer never ran, so the mask was also stale.
+
+Fix: `gate_resize` now dispatches the frame change to the next main-queue turn, as the backend's own `resize` does. It holds the view weakly and rechecks the gate class before use. Calling `Window::bounds_changed` directly from the handler is not an alternative: it re-enters the entity being updated and panics.
+
+Evidence on the built-in display, three toggles: each resize now prints `[resize] gpui viewport=680x390` or `560x320` matching the native bounds, `gap` stays zero, and the captures at both sizes show the full layout, the top strip at the top edge and the mask's lower corners at the new bounds. The same cycle before the fix reproduced the clipped, shifted content. `verify.sh` passes.
+
+Not covered: resizing by a real click on the Resize button after this fix, display scale changes, a second display, and repeated resizing under load. Blur and transparent shoulders at the new size were not inspected against a background.
+
+### Passive-click focus: not reproduced on 2026-11-12
+
+Before the resize fix, a rebuilt harness clicked Next frame, Mirror and Resize with real CGEvents in two runs. Each time the scratch field stayed key, no resign notification fired and a typed character arrived. This contradicts the 2026-11-06 failure and the difference is unexplained, so the blocker stays open rather than passing. The earlier harness ran the scratch window in a full-screen Space; these runs used an ordinary desktop window. In one further run, after clicking Begin typing probe, the scratch window did not regain key status on a real click for the rest of the run. That may be the harness or a defect in ending editing. Testing stopped at the owner's request because it took over the pointer and keyboard.
+
+## First owner check: can it sit around the physical notch?
+
+This is the first live gate, before inspecting video or blur. No software can draw on the physical camera cutout. The goal is a window that reaches the screen's top edge and surrounds or extends below that cutout, rather than being pushed underneath the menu-bar safe area.
+
+Quit the installed notch app yourself so the two panels cannot be confused. From `rust/`, run:
+
+```sh
+./verify.sh
+cargo run --locked --features gui -- --show
+```
+
+The probe requests a 560 by 320 point expanded diagnostic panel at the full-screen top center of each connected display. It deliberately does not use the work-area/visible-frame origin. It is not a finished, compact black notch UI, does not measure the hardware notch width, and does not implement hover expansion. The native Resize action also anchors to the full NSScreen frame.
+
+Check in this order on the built-in notched display:
+
+1. **Placement:** the upper edge touches the physical top edge, centered around the cutout. Content behind the physical cutout is expected to be occluded; the panel should not be wholly displaced below the menu bar. A gap or sideways offset is a failure to report.
+2. **Stacking:** bring another application forward and move its window underneath. The probe should stay visible rather than hiding or becoming an ordinary background window.
+3. **Spaces:** switch to another desktop, then to a full-screen application. The probe should remain attached at the top. Also test revealing an auto-hidden menu bar. Disappearance, relocation or being pushed down is a failure; do not change system settings to conceal it.
+4. **Passive focus:** click a text field in another app and type. Hovering the probe and clicking its non-editor controls should not redirect keyboard input. Begin typing is the deliberate exception. Escape or clicking back into the other app should return typing there.
+5. **Resize:** toggle both sizes; the top-center anchor must not move. Then check transparent shoulders, video frames and mirroring if placement passes.
+
+Use Quit or Ctrl+C to remove the probe. Report pass/fail for placement, stacking, Spaces and focus, including the macOS version and which display failed. A photo is useful for physical-cutout alignment; screenshots alone cannot show the hardware boundary reliably. No screenshot or permission grant is required.
+
+The agent can test code, geometry and headless ABI/resource contracts. Actual compositor, display-cutout and window-focus acceptance needs this live observation. Initial placement is owner-confirmed. The authorized native UI results above cover a subset of these checks and record two failures; untested cases remain open.
+
+## Gate 1: native panel and focus
+
+Implementation: a hidden, unfocused CE popup, then a guarded per-instance subclass with editor-only `canBecomeKeyWindow` and unconditional non-main behavior. Preserve CE's self-delegate and inherited state. Missing native state denies key eligibility. Ending editing explicitly resigns. A Rust lifetime token rejects callbacks for removed/recreated owners.
+
+Manual acceptance checklist; see the live results above for the tested subset:
+
+- Opening the probe leaves the previously active application and text field focused.
+- Non-editor clicks and hover do not steal typing from another app.
+- Begin permits typing; End, Return, Escape and clicking another app end editing without leaving an active key panel.
+- Moving editing between two displays works in both native callback orders.
+- Closing an editing or non-editing window does not crash, leak observers or access stale handles. Quit removes all panels.
+- Public window-level/Spaces flags behave as intended in full-screen apps and across Spaces. This does not establish lock-screen/private SkyLight parity.
+
+Fallback if instance-subclass safety fails: normalize and pin a local copy of only `gpui_ce_macos`, apply an explicit Cargo patch, and test the dependency graph. Do not modify the global Cargo cache. See [council rationale](gpui-ce-council.md).
+
+## Gate 2: clipping and composition
+
+Implementation: the Rust port of the current concave notch path becomes a `CAShapeLayer` mask on the GPUI native view's layer. Child content deliberately overflows the shoulders. CE's own content/backdrop blur APIs are included as fixtures; the earlier upstream-GPUI audit did not describe this CE implementation.
+
+Manual acceptance checklist; resized rendering was repaired on 2026-11-12, the rest is open:
+
+- The gradient, green strip, text and rendered surfaces are clipped together, with genuinely transparent corners, not black rectangles.
+- Resize and display scale changes keep the mask aligned without inversion, seams, stale bounds or clipping regressions.
+- Content blur and backdrop blur display correctly under the native mask. A blur API compiling is not visual equivalence with SwiftUI.
+- Rendering idle content does not keep redrawing unexpectedly. Measure later; no CPU, memory or battery improvement is claimed.
+
+## Gate 3: camera rendering route
+
+Implementation: synthetic full-range, bi-planar 420 CoreVideo buffers exercise CE's required Surface format. `ObjectFit::Cover` selects cropping. CPU-generated mirror variants preserve chroma-pair ordering. Frames change only on explicit button clicks, so this is not a stream-throughput test.
+
+Manual acceptance, all still open:
+
+- Metal initializes and displays correct, changing luminance/chroma content without panic or format errors.
+- Aspect-fill crop and horizontal mirroring are visually correct at both panel sizes and display scales.
+- Replacing and dropping buffers, removing windows and quitting release resources safely.
+- Choose and validate a separate circular/rounded camera mask. CE Surface still has a corner-radius TODO; the fixture deliberately does not hide this gap.
+
+Only after the synthetic gate: add a separately enabled AVFoundation adapter with permission, disconnect, cancellation and shutdown contracts. No real camera session exists in this experiment.
+
+## Before feature migration
+
+Do not treat this scaffold as acceptance of all three gates. Next work is to run the explicit synthetic experiment with the owner, record failures and fix the native/rendering route. Then cover actual text input/IME/accessibility, display hotplug, lock policy, status item and remaining macOS adapters. Port Working on first once the shell and input route are sound. Retain behavioral contracts from the Swift reference rather than carrying over Shelf or Lottie.
+
+The [source audit](gpui-feasibility-audit.md) remains historical evidence for a different upstream GPUI revision. The [CE council record](gpui-ce-council.md) identifies what changed and what is still uncertain.

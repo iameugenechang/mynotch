@@ -1,0 +1,35 @@
+# Local GPUI-CE macOS patch
+
+Source: https://github.com/gpui-ce/gpui-ce/tree/81742184cb1df090709257a5e4061eba44fa8e8a/crates/gpui_macos
+
+Copied from that exact Git checkout on 2026-11-05. The original `LICENSE-APACHE` and source files are retained. Only this crate is copied; sibling crates remain canonical Git dependencies at the same revision. The application manifest applies this directory through `[patch."https://github.com/gpui-ce/gpui-ce"]`. No global Cargo-cache edits or disabled Objective-C checks are involved.
+
+## Changes
+
+- `Cargo.toml`: expand inherited package fields, workspace dependency declarations and lints into a standalone manifest. Preserve aliases, version requirements, features, optional/default-feature flags and target/dev dependencies. Convert sibling dependencies, including the fonts dev-dependency, to the pinned Git source.
+- `src/window.rs`: extract popup tracking-area construction into `src/popup_tracking.rs`; add the resulting retained area to the view. AppKit retains it, then Rust drops the local owned reference.
+- `src/popup_tracking.rs`: declare `initWithRect:options:owner:userInfo:` as returning an object pointer, not `()`. Wrap the initializer's returned pointer in `Retained`, rather than assuming it equals the allocated pointer. Rectangle and tracking options are unchanged.
+
+This fixes the debug runtime panic:
+
+```text
+invalid message send to -[NSTrackingArea initWithRect:options:owner:userInfo:]: expected return to have type code '@', but found 'v'
+```
+
+The initializer change is independent of anotchup's per-instance key-policy subclass. It happens earlier, while GPUI creates a popup.
+
+### Untitled popup style
+
+`src/window.rs` also uses `src/popup_style.rs` to select a popup's style before native window initialization. Untitled popups start as `Borderless | NonactivatingPanel`, rather than `Titled | FullSizeContentView | NonactivatingPanel`. Explicitly titled popups retain their original flags plus `NonactivatingPanel`. Other window kinds are unchanged. Anchored popups remain rejected by the platform before this code runs.
+
+The original titled probe appeared below the menu bar. Changing its style to borderless after anotchup's per-instance class replacement caused an AppKit `NSRangeException` during title-bar KVO observer removal. The running process's unified log confirmed the exception stack; the terminal showed no error. Creating the panel borderless avoids that teardown path. The bridge now validates the style instead of mutating it. No method swizzle or new application delegate is introduced.
+
+## Regression evidence
+
+`rust/src/native.rs` compiles the exact `popup_tracking.rs` used by this backend and calls it on the main thread with a live NSObject owner. It checks the resulting owner, options and rectangle and releases the objects. No NSApplication or window is created.
+
+With the original void-return declaration, `--check-native` reproduced the exact panic and exited 101. With the object-return fix, the same check passes. The full `rust/verify.sh` also passes and asserts that Cargo resolves exactly one macOS backend at this local path. This does not establish that the rest of window creation or live rendering works.
+
+`rust/src/native.rs` also compiles the exact production `popup_style.rs`. Its headless contracts require untitled popups to start borderless and explicitly titled popups to preserve controls and resize policy. The passing style test does not create a window or reproduce the KVO exception. The updated build and headless checks pass without warnings; live placement and teardown still require acceptance.
+
+Remove each patch when adopting an upstream revision with the corresponding fix, retaining the regression tests against that revision's production code. Do not replace this with Release mode or a disabled message-signature check.

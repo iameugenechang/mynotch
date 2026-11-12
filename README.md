@@ -4,6 +4,12 @@ A personal macOS notch app that keeps what you're working on in view, alongside 
 
 anotchup is an independently maintained fork of [boring.notch](https://github.com/TheBoredTeam/boring.notch). It is not affiliated with its maintainers. The repository currently remains at [iameugenechang/mynotch](https://github.com/iameugenechang/mynotch).
 
+## GPUI-CE rewrite branch
+
+`rewrite/gpui-ce` starts a Rust/GPUI-CE rewrite from `193ead6`. Shelf and Lottie are excluded from the rewrite. The Swift app below remains the reference, not the new executable.
+
+Start with [`rust/README.md`](rust/README.md), the [technical gates](docs/gpui-ce-gates.md), and the [council decision](docs/gpui-ce-council.md). `rust/verify.sh` builds and tests without opening windows; the graphical experiment requires explicit `--show`. Native visual/focus acceptance is still open.
+
 ## Working on
 
 - The caption shares the notch's width and outer curves, including media extensions. Nothing extra is shown when empty.

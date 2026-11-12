@@ -26,6 +26,9 @@ Carthage/Build/
 # Derived data
 DerivedData/
 
+# Rust gate build output
+rust/target/
+
 # Build output
 build/
 *.app

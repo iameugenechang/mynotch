@@ -1,0 +1,40 @@
+[package]
+name = "anotchup-gates"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99.1"
+license = "GPL-3.0-only"
+publish = false
+
+[features]
+default = []
+gui = ["dep:gpui", "dep:gpui_platform", "dep:raw-window-handle", "dep:core-video", "dep:core-foundation", "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit", "dep:block"]
+
+[dependencies]
+gpui = { package = "gpui-ce", git = "https://github.com/gpui-ce/gpui-ce", rev = "81742184cb1df090709257a5e4061eba44fa8e8a", default-features = false, optional = true }
+gpui_platform = { package = "gpui_ce_platform", git = "https://github.com/gpui-ce/gpui-ce", rev = "81742184cb1df090709257a5e4061eba44fa8e8a", default-features = false, features = ["font-kit"], optional = true }
+raw-window-handle = { version = "0.6.2", optional = true }
+core-video = { version = "0.5.2", features = ["metal"], optional = true }
+core-foundation = { version = "0.10", optional = true }
+
+# Headless tests compile the production popup initializer and style policy.
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSObject", "NSGeometry", "std"], optional = true }
+
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSWindow"], optional = true }
+
+block = { version = "=0.1.6", optional = true }
+
+[patch.crates-io]
+block = { path = "vendor/block" }
+
+[patch."https://github.com/gpui-ce/gpui-ce"]
+gpui_ce_macos = { path = "vendor/gpui_ce_macos" }
+
+[build-dependencies]
+cc = "1.2"
+
+[[bin]]
+name = "anotchup-gates"
+path = "src/main.rs"
+required-features = ["gui"]
