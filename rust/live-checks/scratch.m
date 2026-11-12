@@ -4,7 +4,7 @@
 // editor is known to hold focus.
 #import <AppKit/AppKit.h>
 static const char *outDir(void) { return getenv("OUT") ?: "/tmp/anotchup-live-checks"; }
-static NSWindow *win; static NSTextField *field; static int resigns; static NSString *logPath;
+static NSWindow *win; static NSTextField *field; static int resigns; static int downs; static NSString *logPath;
 static NSDictionary *probe(BOOL *onscreen) {
     NSArray *on = CFBridgingRelease(CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID));
     for (NSDictionary *w in on) if ([w[(id)kCGWindowOwnerName] isEqual:@"anotchup-gates"]) { if (onscreen) *onscreen = YES; return w; }
@@ -44,8 +44,8 @@ static BOOL scratchKey(void) { return win.isKeyWindow && NSApp.isActive; }
 static void state(NSString *op, NSString *note) {
     BOOL on = NO; NSDictionary *w = probe(&on); CGRect b = pbounds(w);
     NSArray *lines = [logText() componentsSeparatedByString:@"\n"]; NSString *last = lines.count > 1 ? lines[lines.count - 2] : @"";
-    printf("%-16s key=%d active=%d editor=%d resigns=%d field='%s' space=%d front='%s' probe=%s(%.0f,%.0f,%.0f,%.0f) log='%s'%s\n", op.UTF8String,
-        win.isKeyWindow, NSApp.isActive, win.firstResponder == field.currentEditor, resigns, field.stringValue.UTF8String, win.isOnActiveSpace,
+    printf("%-16s key=%d active=%d editor=%d resigns=%d downs=%d field='%s' space=%d front='%s' probe=%s(%.0f,%.0f,%.0f,%.0f) log='%s'%s\n", op.UTF8String,
+        win.isKeyWindow, NSApp.isActive, win.firstResponder == field.currentEditor, resigns, downs, field.stringValue.UTF8String, win.isOnActiveSpace,
         NSWorkspace.sharedWorkspace.frontmostApplication.localizedName.UTF8String ?: "?", w ? (on ? "on" : "OFF") : "GONE", b.origin.x, b.origin.y, b.size.width, b.size.height,
         last.UTF8String, note.length ? [@" | " stringByAppendingString:note].UTF8String : "");
 }
@@ -62,6 +62,7 @@ int main(int argc, const char **argv) {
         field = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 30, 320, 24)]; [win.contentView addSubview:field];
         [win makeKeyAndOrderFront:nil]; [app activateIgnoringOtherApps:YES];
         [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidResignKeyNotification object:win queue:nil usingBlock:^(NSNotification *n) { (void)n; resigns++; }];
+        [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown handler:^NSEvent *(NSEvent *e) { downs++; return e; }];
         if (modifiersHeld()) { printf("refusing to run: a modifier key is held or latched\n"); return 3; }
         spin(0.8); state(@"start", @"");
         BOOL full = NO;
@@ -79,6 +80,20 @@ int main(int argc, const char **argv) {
                     CGEventRef d = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)[a[1] intValue], true); CGEventPost(kCGHIDEventTap, d); CFRelease(d); usleep(40000);
                     CGEventRef u = CGEventCreateKeyboardEvent(NULL, (CGKeyCode)[a[1] intValue], false); CGEventPost(kCGHIDEventTap, u); CFRelease(u); spin(0.6); }
             }
+            // Put the scratch window's top-left at a screen point (top-left origin), e.g. under the probe.
+            else if ([k isEqual:@"place"]) { [win setFrameTopLeftPoint:NSMakePoint([a[1] doubleValue], NSScreen.screens[0].frame.size.height - [a[2] doubleValue])]; spin(0.4); }
+            else if ([k isEqual:@"click"]) { resigns = 0; click(CGPointMake([a[1] doubleValue], [a[2] doubleValue])); spin(0.8); }
+            else if ([k isEqual:@"prclick"]) { resigns = 0; CGPoint p = CGPointMake(b.origin.x + [a[1] doubleValue], b.origin.y + [a[2] doubleValue]); post(kCGEventMouseMoved, p); spin(0.15);
+                CGEventRef d = CGEventCreateMouseEvent(NULL, kCGEventRightMouseDown, p, kCGMouseButtonRight); CGEventPost(kCGHIDEventTap, d); CFRelease(d); usleep(60000);
+                CGEventRef u = CGEventCreateMouseEvent(NULL, kCGEventRightMouseUp, p, kCGMouseButtonRight); CGEventPost(kCGHIDEventTap, u); CFRelease(u); spin(0.8); }
+            else if ([k isEqual:@"pscroll"]) { resigns = 0; post(kCGEventMouseMoved, CGPointMake(b.origin.x + [a[1] doubleValue], b.origin.y + [a[2] doubleValue])); spin(0.15);
+                for (int n = 0; n < 5; n++) { CGEventRef w = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitPixel, 1, -12); CGEventPost(kCGHIDEventTap, w); CFRelease(w); usleep(20000); } spin(0.8); }
+            else if ([k isEqual:@"pburst"]) { CGPoint p = CGPointMake(b.origin.x + [a[1] doubleValue], b.origin.y + [a[2] doubleValue]); post(kCGEventMouseMoved, p); spin(0.15);
+                for (int n = 0; n < [a[3] intValue]; n++) { post(kCGEventLeftMouseDown, p); usleep(25000); post(kCGEventLeftMouseUp, p); usleep(45000); } spin(1.0); }
+            else if ([k isEqual:@"frame"]) { NSRect f = win.frame; note = [NSString stringWithFormat:@"scratch frame x=%.0f..%.0f y=%.0f..%.0f (top-left origin)", NSMinX(f), NSMaxX(f), NSScreen.screens[0].frame.size.height - NSMaxY(f), NSScreen.screens[0].frame.size.height - NSMinY(f)]; }
+            // Glide the pointer from a probe point to a screen point in small steps, like a hand would.
+            else if ([k isEqual:@"pglide"]) { CGPoint from = CGPointMake(b.origin.x + [a[1] doubleValue], b.origin.y + [a[2] doubleValue]), to = CGPointMake([a[3] doubleValue], [a[4] doubleValue]);
+                for (int n = 0; n <= 40; n++) { post(kCGEventMouseMoved, CGPointMake(from.x + (to.x - from.x) * n / 40, from.y + (to.y - from.y) * n / 40)); usleep(8000); } spin(0.7); }
             else if ([k isEqual:@"wait"]) spin([a[1] doubleValue] / 1000.0);
             else if ([k isEqual:@"clear"]) field.stringValue = @"";
             else if ([k isEqual:@"shot"]) { NSDictionary *w = probe(NULL); if (w) system([NSString stringWithFormat:@"screencapture -x -o -l %d %s/%@.png", [w[(id)kCGWindowNumber] intValue], outDir(), a[1]].UTF8String); }

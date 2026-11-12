@@ -163,6 +163,7 @@ impl Render for Gate {
         // Read native state after outside-click resign; this is a keyboard probe, not an IME editor.
         let editing = native::is_editing(window);
         div().id("gate").track_focus(&self.focus).on_key_down(cx.listener(Self::key))
+            .on_hover(|hovered,_,_|eprintln!("[hover] panel={hovered}"))
             .size_full().flex().flex_col().gap_2().p_4().text_color(rgb(0xffffff)).font_family("Helvetica Neue")
             .bg(linear_gradient(90.0,linear_color_stop(rgb(0x213554),0.0),linear_color_stop(rgb(0x752752),1.0)))
             // Deliberately reach every edge: the native mask must clip this subtree, not just its background.

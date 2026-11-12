@@ -3122,6 +3122,16 @@ unsafe extern "C" fn handle_view_event(this: &Objc2Object, _: Sel, native_event:
 
         if let Some(mut callback) = lock.event_callback.take() {
             drop(lock);
+            // GPUI keeps the last move position when the pointer exits, so an
+            // element left by a fast pointer stays hovered. Report where the
+            // pointer went before reporting the exit.
+            if let PlatformInput::MouseExited(exit) = &event {
+                callback(PlatformInput::MouseMove(MouseMoveEvent {
+                    position: exit.position,
+                    pressed_button: exit.pressed_button,
+                    modifiers: exit.modifiers,
+                }));
+            }
             callback(event);
             window_state.lock().event_callback = Some(callback);
         }

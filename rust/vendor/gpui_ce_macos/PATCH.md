@@ -30,6 +30,10 @@ Upstream keeps a visible window subscribed to its display link indefinitely, so 
 
 The waker holds the window state weakly. It restarts the link directly when it can take the state lock, and otherwise defers to the foreground executor, because GPUI may wake during a backend call that already holds that lock. This applies to every window kind, not only popups.
 
+### Pointer position on exit
+
+Upstream forwards `mouseExited:` without updating the pointer position GPUI uses for hit testing. An element under the pointer's last reported position stays hovered after the pointer leaves the window in one jump. `handle_view_event` in `src/window.rs` now sends a `MouseMove` to the exit position, with the exit's button and modifier state, before forwarding the exit. This applies to every window kind. It is covered only by the live runs in the gate record.
+
 ## Regression evidence
 
 `rust/src/native.rs` compiles the exact `popup_tracking.rs` used by this backend and calls it on the main thread with a live NSObject owner. It checks the resulting owner, options and rectangle and releases the objects. No NSApplication or window is created.

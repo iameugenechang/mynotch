@@ -118,7 +118,17 @@ Not covered: another application's full-screen window, a second display, moving 
 - **Pass: resize under load.** 120 steps at 60 ms intervals mixing frame, mirror and resize delivered all 60 viewport changes, and the final capture matched the expected frame.
 - **Memory footprint.** The roughly 220 MB figure is not caused by frame replacement. It is already present 0.6 seconds after launch, before any step, and stays while frames are being presented at any rate. About 144 MB of it is listed as reclaimable graphics memory. Once the window is idle the footprint is 39 to 46 MB. Which allocation owns it has not been traced.
 
-Not done: the deferred branch of the frame waker, taken when the window state is locked during a wake, was not deliberately exercised. Blur has not been compared with the Swift app side by side.
+Not done: blur has not been compared with the Swift app side by side. The deferred branch of the frame waker was exercised in the second input session.
+
+### Second input session on 2026-11-12
+
+Same setup, owner still away. One defect found and fixed.
+
+- **Fixed: hover stuck after a fast exit.** When the pointer left a hovered button in one jump, the button kept its hover colour indefinitely, even after later moves elsewhere on screen. A slow glide out cleared it, because intermediate moves crossed the panel. GPUI does clear its pointer-inside flag on exit, but hit testing still uses the last move position, which the exit event does not update. The vendored backend now sends a move to the exit position before forwarding the exit. After the fix, jumps far away, just below the window, into the transparent gutter, and after the display link had stopped all cleared the hover; re-entering restored it and the next click worked.
+- **Pass: transparent regions pass clicks through.** With the scratch window placed under the probe, clicks in the side gutters and below the rounded lower corner reached the scratch window. A click on the panel body did not.
+- **Pass: right-click and scrolling.** Neither took key status from the scratch field; typing continued there.
+- **Pass: click burst.** 30 clicks at about 70 ms spacing after the display link had stopped produced 30 actions and the correct final frame, with focus unchanged.
+- **Pass: deferred frame wake.** With the direct restart temporarily disabled so every wake took the deferred branch, timed steps, a pulse, teardown, hover and a click all behaved the same. The temporary change was reverted.
 
 ## First owner check: can it sit around the physical notch?
 
