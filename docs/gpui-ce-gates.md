@@ -58,7 +58,7 @@ Local diagnostic files: `/tmp/anotchup-ui-check/live.m`, `/tmp/anotchup-ui-check
 
 ### Resize rendering repair
 
-On 2026-11-12 the resized-content defect was reproduced and fixed without sending any input events. `--show --resize-cycle` makes the probe toggle its own size three times on a timer, through the same code path as the Resize button. Captures were taken by window id.
+On 2026-11-12 the resized-content defect was reproduced and fixed without sending any input events. `--show --steps resize,resize,resize` makes the probe toggle its own size on a timer, through the same code path as the Resize button. Captures were taken by window id.
 
 Cause: the bridge called `setFrame:` from inside a GPUI update. AppKit resizes the view synchronously, so the backend's resize callback ran while the app was already borrowed. GPUI's handler uses a fallible borrow and drops the update, so the Metal drawable grew while GPUI kept laying out at the old viewport. The old frame was then stretched over the new drawable. Before the fix, no `[resize]` line was printed after a resize; the bounds observer never ran, so the mask was also stale.
 
@@ -67,6 +67,20 @@ Fix: `gate_resize` now dispatches the frame change to the next main-queue turn, 
 Evidence on the built-in display, three toggles: each resize now prints `[resize] gpui viewport=680x390` or `560x320` matching the native bounds, `gap` stays zero, and the captures at both sizes show the full layout, the top strip at the top edge and the mask's lower corners at the new bounds. The same cycle before the fix reproduced the clipped, shifted content. `verify.sh` passes.
 
 Not covered: resizing by a real click on the Resize button after this fix, display scale changes, a second display, and repeated resizing under load. Blur and transparent shoulders at the new size were not inspected against a background.
+
+### Input-free checks on 2026-11-12
+
+Run on the built-in display, macOS 27.0.1, debug build, with no pointer, key or focus events. `--show --steps frame,mirror,resize,remove,quit` runs the button actions on a timer; `--step-ms` sets the interval. Begin typing is deliberately not scriptable because it takes keyboard focus. Captures were taken by window id and read pixel by pixel.
+
+- **Fixed: aspect-fill crop.** `ObjectFit::Cover` enlarges the painted bounds beyond the element and does not clip. The 4:3 frame in the 210 by 130 box painted 27.5 points above and below it, over the neighbouring rows. The surface now sits in a fixed-size `overflow_hidden` box, whose content mask does the cropping. Any later camera view needs the same wrapper.
+- **Fixed: fixture layout.** The video box was being shrunk by its flex row and the text column overflowed the panel. The box is now `flex_none` and the column can shrink.
+- **Pass: colour, crop and mirror.** Eight captures across both sizes, three frame advances and both mirror states. About 5,500 samples per capture were compared with the generator, the cover-crop arithmetic and full-range BT.601 conversion, after converting to the display's P3 space. The worst channel error was 1 of 255. Samples within three source pixels of a colour boundary were skipped. Pixels just outside the box were background in every capture.
+- **Pass: frame replacement.** 600 replacements at 50 ms intervals. Footprint stayed flat at 224 MB during the run and returned to 46 MB afterwards, against 33 MB for a fresh idle probe. `leaks` reported 410 leaks with no steps and 416 after both 100 and 600 steps, so nothing grows with frame count. The fixed set is rooted in an AppKit app-intents XPC connection, not in the bridge.
+- **Pass: teardown.** Five scripted runs ending in Remove display probe or Quit, some after resizing, exited with status 0, no panic, no new crash report and no exception in the unified log. Editing-state teardown was not run, since it needs keyboard focus.
+- **Pass: mask and transparency.** The shoulders, side gutters and lower corners have alpha 0 at both sizes, with the opaque edge starting at the same offsets after resizing. The green strip and gradient are clipped by the mask.
+- **Idle redraw.** The backend's display link keeps calling its frame callback while nothing changes. Cost was about 1.3% of one core over 20 seconds. This is measured, not accepted: the finished app should not need a running display link when idle.
+
+Limits: one display at one scale. Captures show what the window server composited, not the panel against the hardware cutout. Blur was only checked by eye in the captures. The 224 MB figure under rapid replacement is unexplained. The startup log errors about app intents and a missing bundle identifier come from running an unbundled executable.
 
 ### Passive-click focus: not reproduced on 2026-11-12
 
@@ -127,7 +141,7 @@ Manual acceptance checklist; resized rendering was repaired on 2026-11-12, the r
 
 Implementation: synthetic full-range, bi-planar 420 CoreVideo buffers exercise CE's required Surface format. `ObjectFit::Cover` selects cropping. CPU-generated mirror variants preserve chroma-pair ordering. Frames change only on explicit button clicks, so this is not a stream-throughput test.
 
-Manual acceptance, all still open:
+Manual acceptance. The 2026-11-12 input-free checks cover the first three on one display and scale; the camera mask is still open:
 
 - Metal initializes and displays correct, changing luminance/chroma content without panic or format errors.
 - Aspect-fill crop and horizontal mirroring are visually correct at both panel sizes and display scales.

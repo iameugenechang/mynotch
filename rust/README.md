@@ -27,8 +27,8 @@ cargo run --locked --features gui -- --show
 - Creates a borderless, nonactivating popup while hidden and unfocused, installs a guarded panel subclass and a native notch mask, then shows without explicit activation. It no longer changes the window style after subclassing.
 - Prints `[startup]` stages and `[placement]` coordinates. A process that stays alive without `probe ready` has not completed setup; AppKit exceptions may appear only in the macOS unified log.
 - Begin typing probe permits key status. End, Enter, Escape, and native focus loss end editing. This is a raw-key probe, not a text editor: no selection, composition, IME, clipboard, or accessibility parity is claimed.
-- Next frame changes a synthetic asymmetric NV12 frame; Mirror reverses luminance pixels and chroma pairs before upload. There is no camera, repeating frame producer, or audio.
-- Resize changes the panel dimensions and rebuilds the outer mask. The native frame change is deferred to the next main-queue turn, so GPUI receives the new viewport. `--show --resize-cycle` toggles the size three times on a timer, for checking this without input events. The green strip and gradient deliberately extend into the concave shoulders.
+- Next frame changes a synthetic asymmetric NV12 frame; Mirror reverses luminance pixels and chroma pairs before upload. `ObjectFit::Cover` does not clip, so the surface sits in a fixed-size `overflow_hidden` box that crops it. There is no camera, repeating frame producer, or audio.
+- Resize changes the panel dimensions and rebuilds the outer mask. The native frame change is deferred to the next main-queue turn, so GPUI receives the new viewport. `--show --steps frame,mirror,resize,remove,quit` runs those button actions on a timer (`--step-ms N` sets the interval), for checks that must not send input events. The green strip and gradient deliberately extend into the concave shoulders.
 - Remove display probe closes that window. Quit exits the process. Display enumeration happens at launch; hotplug reconciliation is not implemented.
 - The camera fixture intentionally has square corners. An outer notch mask does not solve the independent camera crop.
 

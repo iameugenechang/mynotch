@@ -29,7 +29,7 @@ impl Gate {
     fn new(
         id: u64,
         registry: Rc<RefCell<DisplayLifetimes>>,
-        resize_cycle: bool,
+        script: Script,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -55,15 +55,14 @@ impl Gate {
                 );
                 assert!(native::mask(window), "native mask update failed");
             }));
-        if resize_cycle {
-            // Input-free diagnostic: same code path as the Resize button, no pointer or keys.
+        if !script.steps.is_empty() {
+            // Input-free diagnostic: the same code paths as the buttons, no pointer or keys.
+            // "begin" is deliberately absent: it would take keyboard focus from the owner.
             cx.spawn_in(window, async move |this, cx| {
-                for _ in 0..3 {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_secs(3))
-                        .await;
+                for step in script.steps.iter() {
+                    cx.background_executor().timer(script.interval).await;
                     if this
-                        .update_in(cx, |this, window, cx| this.toggle_size(window, cx))
+                        .update_in(cx, |this, window, cx| this.step(step, window, cx))
                         .is_err()
                     {
                         break;
@@ -83,6 +82,27 @@ impl Gate {
                 cx.notify();
             }));
         gate
+    }
+    fn step(&mut self, step: &str, window: &mut Window, cx: &mut Context<Self>) {
+        eprintln!("[step] {step}");
+        match step {
+            "frame" => self.next_frame(cx),
+            "mirror" => self.toggle_mirror(cx),
+            "resize" => self.toggle_size(window, cx),
+            "remove" => window.remove_window(),
+            "quit" => cx.quit(),
+            _ => unreachable!("steps are validated at startup"),
+        }
+    }
+    fn next_frame(&mut self, cx: &mut Context<Self>) {
+        self.phase = (self.phase + 24) % 320;
+        self.frame = native::frame(self.phase, self.mirrored);
+        cx.notify();
+    }
+    fn toggle_mirror(&mut self, cx: &mut Context<Self>) {
+        self.mirrored = !self.mirrored;
+        self.frame = native::frame(self.phase, self.mirrored);
+        cx.notify();
     }
     fn toggle_size(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.expanded = !self.expanded;
@@ -140,17 +160,46 @@ impl Render for Gate {
                 .child(div().id("quit").px_2().bg(rgb(0x803050)).cursor_pointer().child("Quit").on_click(|_,_,cx|cx.quit())))
             .child(format!("Keys: {}",self.text))
             .child(div().flex().gap_4()
-                .child(surface(self.frame.clone()).object_fit(ObjectFit::Cover).w(px(210.)).h(px(130.)))
-                .child(div().flex().flex_col().gap_3()
+                .child(div().flex_none().w(px(210.)).h(px(130.)).overflow_hidden().child(surface(self.frame.clone()).object_fit(ObjectFit::Cover).size_full()))
+                .child(div().flex_1().min_w_0().flex().flex_col().gap_3()
                     .child(div().blur(px(2.)).child("CE subtree blur fixture"))
                     .child(div().bg(rgba(0xffffff30)).backdrop_blur(px(8.)).p_2().child("Backdrop fixture"))
                     .child("Video corners deliberately square: separate camera mask still open.")))
             .child(div().flex().gap_2()
-                .child(div().id("frame").px_2().bg(rgb(0x456080)).cursor_pointer().child("Next frame").on_click(cx.listener(|this,_,_,cx|{this.phase=(this.phase+24)%320;this.frame=native::frame(this.phase,this.mirrored);cx.notify();})))
-                .child(div().id("mirror").px_2().bg(rgb(0x456080)).cursor_pointer().child(if self.mirrored {"Mirrored"} else {"Mirror"}).on_click(cx.listener(|this,_,_,cx|{this.mirrored = !this.mirrored;this.frame=native::frame(this.phase,this.mirrored);cx.notify();})))
+                .child(div().id("frame").px_2().bg(rgb(0x456080)).cursor_pointer().child("Next frame").on_click(cx.listener(|this,_,_,cx|this.next_frame(cx))))
+                .child(div().id("mirror").px_2().bg(rgb(0x456080)).cursor_pointer().child(if self.mirrored {"Mirrored"} else {"Mirror"}).on_click(cx.listener(|this,_,_,cx|this.toggle_mirror(cx))))
                 .child(div().id("resize").px_2().bg(rgb(0x456080)).cursor_pointer().child("Resize").on_click(cx.listener(|this,_,window,cx|this.toggle_size(window,cx))))
                 .child(div().id("close").px_2().bg(rgb(0x456080)).cursor_pointer().child("Remove display probe").on_click(|_,window,_|window.remove_window())))
             .child("No camera, preferences, private SkyLight, or installed-app integration. IME is not implemented.")
+    }
+}
+/// Timed button actions for checks that must not use the owner's input devices.
+#[derive(Clone)]
+struct Script {
+    steps: Rc<[String]>,
+    interval: std::time::Duration,
+}
+impl Script {
+    fn parse(args: &[String]) -> Option<Self> {
+        let (first, mut rest) = args.split_first()?;
+        if first != "--show" {
+            return None;
+        }
+        let mut steps = vec![];
+        let mut interval = 3000;
+        while let [flag, value, tail @ ..] = rest {
+            match flag.as_str() {
+                "--steps" => steps = value.split(',').map(str::to_owned).collect(),
+                "--step-ms" => interval = value.parse().ok().filter(|ms| *ms >= 50)?,
+                _ => return None,
+            }
+            rest = tail;
+        }
+        let known = ["frame", "mirror", "resize", "remove", "quit"];
+        (rest.is_empty() && steps.iter().all(|step| known.contains(&step.as_str()))).then(|| Self {
+            steps: steps.into(),
+            interval: std::time::Duration::from_millis(interval),
+        })
     }
 }
 fn main() {
@@ -165,16 +214,17 @@ fn main() {
         );
         return;
     }
-    let resize_cycle = args == ["--show", "--resize-cycle"];
-    if args != ["--show"] && !resize_cycle {
+    let script = Script::parse(&args);
+    if script.is_none() {
         println!(
-            "anotchup-gates\n  --check-native  Headless ABI, block, buffer and path contracts\n  --show          Explicitly open synthetic panels on connected displays\n  --show --resize-cycle  Also toggle the panel size three times on a timer (no input events)\nNo installed app, user preferences, camera or permissions are accessed."
+            "anotchup-gates\n  --check-native  Headless ABI, block, buffer and path contracts\n  --show          Explicitly open synthetic panels on connected displays\n  --show --steps frame,mirror,resize,remove,quit [--step-ms N]\n                  Also run those button actions on a timer (no input events)\nNo installed app, user preferences, camera or permissions are accessed."
         );
         if !args.is_empty() {
             std::process::exit(2);
         }
         return;
     }
+    let script = script.expect("validated above");
     eprintln!("[startup] entering GPUI event loop");
     gpui_platform::application().run(move |cx: &mut App| {
         let displays = cx.displays();
@@ -197,6 +247,7 @@ fn main() {
                 size(px(560.), px(320.)),
             );
             let registry = registry.clone();
+            let script = script.clone();
             cx.open_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -217,8 +268,7 @@ fn main() {
                         native::install(window),
                         "CE native panel shape changed; refusing unguarded window"
                     );
-                    let view =
-                        cx.new(|cx| Gate::new(index as u64, registry, resize_cycle, window, cx));
+                    let view = cx.new(|cx| Gate::new(index as u64, registry, script, window, cx));
                     assert!(native::mask(window), "native mask installation failed");
                     native::show(window);
                     view
