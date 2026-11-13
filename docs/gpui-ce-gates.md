@@ -116,7 +116,7 @@ Not covered: another application's full-screen window, a second display, moving 
 - **Pass: release build.** Builds in about 32 seconds to a 19.6 MB executable. Headless contracts, the eight-capture colour, crop and mirror comparison, and four teardown runs pass.
 - **Pass: animation with the idle fix.** A scripted 600 ms repeating opacity pulse kept the display link running, at about 700 context switches per second and 0.7% of one core in release (1.7% in debug). After the pulse was removed the process returned to under 2 context switches per second and no measurable CPU.
 - **Pass: resize under load.** 120 steps at 60 ms intervals mixing frame, mirror and resize delivered all 60 viewport changes, and the final capture matched the expected frame.
-- **Memory footprint.** The roughly 220 MB figure is not caused by frame replacement. It is already present 0.6 seconds after launch, before any step, and stays while frames are being presented at any rate. About 144 MB of it is listed as reclaimable graphics memory. Once the window is idle the footprint is 39 to 46 MB. Which allocation owns it has not been traced.
+- **Memory footprint.** The roughly 220 MB figure is not caused by frame replacement. It is already present 0.6 seconds after launch, before any step, and stays while frames are being presented at any rate. About 144 MB of it is listed as reclaimable graphics memory. Once the window is idle the footprint is 39 to 46 MB. It was traced later to the Metal driver; see "Where the 220 MB goes".
 
 Not done: blur has not been compared with the Swift app side by side. The deferred branch of the frame waker was exercised in the second input session.
 
@@ -164,6 +164,22 @@ WindowServer CPU with neither app running was 18 to 28% in the same rounds, from
 Reading: idle cost is equal, which is the state a notch app is in almost all the time, and it needed the display-link patch to get there. SwiftUI uses far less memory and wakes the process far less while something is moving. GPUI's own process costs slightly more, but it hands the compositor one finished layer, which is cheaper for the system during animation.
 
 Limits. This is a small fixture, not the app: the Swift app's real cost is mostly media, calendar and HUD work that neither twin includes. WindowServer figures are shared with the whole desktop and noisy; only the consistent gap across rounds is meaningful. The twin shows frames as layer contents and builds each frame in Swift on the main thread, which is part of its app CPU in the frame test; its video colours differ from the expected values by up to 33 of 255, where the GPUI probe is within 1. Text editing cost, energy on battery and the lock screen were not compared. The executable size gap is mostly SwiftUI being a system framework.
+
+### Where the 220 MB goes
+
+Traced on 2026-11-12, M5 Max with 64 GB, macOS 27.0.1. The footprint is not GPUI's own allocation. It is memory the Metal driver attaches to any process that renders.
+
+- `footprint -v` on the probe shows 22 regions of exactly 8 MB, 176 MB in total, under "Owned physical footprint (unmapped) (graphics)". Metal's own count of what the process allocated on the device (`currentAllocatedSize`) was 17 to 29 MB at the same moment, which matches the drawables, atlases and intermediate textures.
+- Removing the blur, backdrop and video fixtures changed the total by 3 MB and left all 22 regions in place.
+- `live-checks/metal-baseline.m`, a Metal program with no GPUI, shows the same thing: 21 regions of 8 MB and a 192 MB footprint. Creating a device and command queue costs nothing (11 MB). The regions appear with the first committed render pass, whether it targets a `CAMetalLayer` drawable, an offscreen texture or an IOSurface.
+- The amount does not depend on frame rate (1 to 60 per second), on the number of passes or pipelines, on multisampling, or on limiting the queue to two command buffers.
+- It is released when rendering stops: the footprint falls to about 20 MB within two seconds, and the regions are gone within about 15.
+
+So GPUI holds roughly 180 MB above its baseline only while it is drawing frames and for a moment after. The SwiftUI twin avoids it because Core Animation renders in WindowServer, not in the app. No setting was found that reduces it, and the vendored backend's idle patch is what lets the probe release it, since a window that stops drawing stops submitting render passes.
+
+Consequences for the app: idle footprint stays near 40 MB. Anything that redraws continuously holds the extra memory for as long as it runs, including a focused text field with a blinking caret, a music visualizer or a camera preview.
+
+Not established: what the regions are used for inside the driver, whether the amount differs on a machine with less memory or a different GPU, and whether the system counts it against the app under memory pressure. One run reported 144 MB of it as reclaimable.
 
 ## First owner check: can it sit around the physical notch?
 

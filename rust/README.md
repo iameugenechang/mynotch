@@ -44,6 +44,7 @@ No user preferences, persistence migration, private SkyLight API, system helper,
 
 - `compare.sh` measures launch, idle, a pulse and frame replacement for one app. `APP=twin` selects the SwiftUI twin, on any of these scripts. No input events.
 - `windowserver.sh` reports WindowServer CPU while each variant runs a pulse. No input events.
+- `metal-baseline.m` is a Metal program with no GPUI, for separating the driver's memory from GPUI's. No input events.
 - `ax-dump.m` prints the probe's accessibility tree, or presses an element by title. No pointer or key events.
 
 They need Screen Recording access for the terminal. `input-session.sh` and `ax-dump.m` also need Accessibility. Set `PROFILE=release` to test a release build. Output goes to `/tmp/anotchup-live-checks`.
